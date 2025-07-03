@@ -21,15 +21,36 @@
 #'
 #' @export
 synthesise_raw_data <- function(t, y, n) {
-  # synthesise raw data for bootstrapping
-  raw_t <- rep(t, n)
-  raw_data <- cbind(raw_t, 0)
-  colnames(raw_data) <- c("t", "Sero-result") # Sero-result=0=seronegative, Sero-result=1=seropositive
-  for (i in 1:length(t)) {
-    start_pt <- sum(n[1:(i-1)])+1
-    end_pt <- start_pt + y[i] -1
-    raw_data[start_pt:end_pt,2] <- rep(1, y[i])
+  if (is.matrix(t) && ncol(t) == 2) {
+    # Age intervals
+    raw_t <- numeric(sum(n))
+    raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
+    current_index <- 1
+
+    for (i in 1:nrow(t)) {
+      num_people <- n[i]
+      num_positive <- y[i]
+      num_negative <- n[i] - y[i]
+      ages <- runif(num_people, min = t[i, 1], max = t[i, 2])  # Sample uniformly in interval
+      sero_results <- c(rep(1, num_positive), rep(0, num_negative))
+      sero_results <- sample(sero_results)  # Shuffle
+      raw_data[current_index:(current_index + num_people - 1), ] <- data.frame(
+        t = ages,
+        `Sero-result` = sero_results
+      )
+      current_index <- current_index + num_people
+    }
+  } else {
+    # Point data
+    raw_t <- rep(t, n)
+    raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
+    for (i in 1:length(t)) {
+      start_pt <- sum(n[1:(i - 1)]) + 1
+      end_pt <- start_pt + y[i] - 1
+      raw_data[start_pt:end_pt, "Sero-result"] <- 1
+    }
   }
+
   return(raw_data)
 }
 
