@@ -1,4 +1,4 @@
-#' Vynnycky Catalytic Model B (Piecewise FOI, Full Assay Sensitivity)
+#' Vynnycky Catalytic Model B (Piecewise FOI, Perfect Assay Sensitivity)
 #'
 #' Fits a catalytic model with a piecewise constant force of infection (FOI), assuming full assay sensitivity (\eqn{\rho = 1}).
 #' This model separates the population into two age groups: younger individuals (\eqn{t < 13}) and older individuals (\eqn{t \geq 13}),

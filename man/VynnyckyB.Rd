@@ -2,7 +2,7 @@
 % Please edit documentation in R/VynnyckyB.R
 \name{VynnyckyB}
 \alias{VynnyckyB}
-\title{Vynnycky Catalytic Model B (Piecewise FOI, Full Assay Sensitivity)}
+\title{Vynnycky Catalytic Model B (Piecewise FOI, Perfect Assay Sensitivity)}
 \usage{
 VynnyckyB(t, y, n)
 }
