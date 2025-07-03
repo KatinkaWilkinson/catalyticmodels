@@ -1,52 +1,45 @@
 #' Synthesize Individual-Level Raw Data from Aggregated Counts
 #'
 #' Converts grouped count data into pseudo-individual-level data, useful for bootstrapping procedures.
-#' For each age value in \code{t}, generates \code{n[i]} rows with corresponding serostatus values.
+#' For age intervals, ages are drawn from a continuous uniform distribution over the interval.
 #'
-#' @param t A numeric vector of ages (or age group identifiers).
-#' @param y A numeric vector of seropositive counts corresponding to each age group.
-#' @param n A numeric vector of total sample sizes corresponding to each age group.
+#' @param t A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.
+#' @param y A numeric vector of seropositive counts corresponding to each age group or interval.
+#' @param n A numeric vector of total sample sizes corresponding to each age group or interval.
 #'
-#' @return A matrix with two columns:
+#' @return A data frame with two columns:
 #' \describe{
-#'   \item{\code{t}}{Age values repeated \code{n[i]} times for each group.}
+#'   \item{\code{t}}{Simulated age values.}
 #'   \item{\code{Sero-result}}{Binary indicator (0 = seronegative, 1 = seropositive).}
 #' }
 #'
-#' @examples
-#' t <- c(1, 2, 3)
-#' y <- c(1, 2, 3)
-#' n <- c(2, 3, 4)
-#' synth_data <- synthesise_raw_data(t, y, n)
-#'
 #' @export
 synthesise_raw_data <- function(t, y, n) {
-  if (is.matrix(t) && ncol(t) == 2) {
-    # Age intervals
-    raw_t <- numeric(sum(n))  # storage for ages
-    raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
+  total_people <- sum(n)
+  raw_data <- data.frame(t = numeric(total_people), `Sero-result` = 0)
 
-    current_index <- 1
+  current_index <- 1
+
+  if (is.matrix(t) && ncol(t) == 2) {
+    # For age intervals: sample from continuous uniform distribution
     for (i in 1:nrow(t)) {
       num_people <- n[i]
       num_positive <- y[i]
       num_negative <- n[i] - y[i]
 
-      # Integer ages only (discrete uniform sampling)
-      age_range <- floor(t[i, 1]):ceiling(t[i, 2] - 1)
-      if (length(age_range) == 0) age_range <- floor(t[i, 1])  # handle narrow bins
-      ages <- sample(age_range, size = num_people, replace = TRUE)
-
-      sero_results <- c(rep(1, num_positive), rep(0, num_negative))
-      sero_results <- sample(sero_results) # shuffle sero results
+      ages <- runif(num_people, min = t[i, 1], max = t[i, 2])  # continuous uniform sampling
+      sero_results <- sample(c(rep(1, num_positive), rep(0, num_negative)))
 
       raw_data[current_index:(current_index + num_people - 1), ] <- data.frame(
         t = ages,
         `Sero-result` = sero_results
       )
+
       current_index <- current_index + num_people
     }
+
   } else {
+    # For exact ages
     raw_t <- rep(t, n)
     raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
 
