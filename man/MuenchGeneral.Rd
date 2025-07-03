@@ -2,20 +2,51 @@
 % Please edit documentation in R/MuenchGeneral.R
 \name{MuenchGeneral}
 \alias{MuenchGeneral}
-\title{Muench's Catalytic Model}
+\title{General Muench Catalytic Model with Scaling Parameters}
 \usage{
 MuenchGeneral(t, y, n)
 }
 \arguments{
-\item{t}{Vector of age groups}
+\item{t}{A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.}
 
-\item{y}{Seropositive counts}
+\item{y}{A numeric vector of seropositive counts for each age group or interval.}
 
-\item{n}{Sample sizes}
+\item{n}{A numeric vector of total sample sizes for each age group or interval.}
 }
 \value{
-A list with MLE estimates, CIs, and bootstrap samples
+A list with the following elements:
+\itemize{
+\item \code{par}: Maximum likelihood estimates for \code{k}, \code{l}, and the force of infection \code{foi}.
+\item \code{CIs}: Bootstrap-based 95\% confidence intervals for each parameter.
+\item \code{boot_params}: Bootstrap samples for \code{k}, \code{l}, and \code{foi}.
+}
 }
 \description{
-Fits the catalytic model: π(t) = k(l - e^{-λt})
+Fits the general form of Muench's catalytic model for seroprevalence, allowing for flexible scaling parameters \eqn{k} and \eqn{l}.
+The model assumes the cumulative probability of infection by age \eqn{t} is:
+\deqn{\pi(t) = k(l - \exp(-\lambda t))}
+}
+\details{
+This form allows for partial susceptibility (\eqn{k < 1}) and incomplete saturation (\eqn{l < 1}) of infection, making it suitable for modeling diseases with non-universal exposure or immunity.
+
+For age intervals \eqn{[a, b]}, the model computes the average value of \eqn{\pi(t)} over the interval using:
+\deqn{\bar{\pi}_{[a,b]} = k \left(l - \frac{e^{-\lambda a} - e^{-\lambda b}}{\lambda(b - a)}\right)}
+
+This general form of the catalytic model relaxes assumptions of complete susceptibility and perfect saturation.
+It is useful in real-world settings where heterogeneity in exposure or immunity may reduce the total proportion infected over time.
+}
+\examples{
+# Example with exact ages
+t <- 1:10
+y <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+n <- rep(10, length(t))
+result <- MuenchGeneral(t, y, n)
+result$par
+
+# Example with age intervals
+age_intervals <- matrix(c(0,1, 1,2, 2,3, 3,4, 4,5), ncol=2, byrow=TRUE)
+y <- c(0, 1, 2, 3, 4)
+n <- rep(10, 5)
+result <- MuenchGeneral(age_intervals, y, n)
+
 }

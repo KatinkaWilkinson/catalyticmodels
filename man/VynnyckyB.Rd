@@ -2,30 +2,32 @@
 % Please edit documentation in R/VynnyckyB.R
 \name{VynnyckyB}
 \alias{VynnyckyB}
-\title{Vynnycky Catalytic Model B (Piecewise Constant FOI, Assay Sensitivity = 1)}
+\title{Vynnycky Catalytic Model B (Piecewise FOI, Full Assay Sensitivity)}
 \usage{
 VynnyckyB(t, y, n)
 }
 \arguments{
-\item{t}{A numeric vector of age groups.}
+\item{t}{A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.}
 
-\item{y}{A numeric vector of seropositive counts corresponding to each age group.}
+\item{y}{A numeric vector of seropositive counts for each age group or interval.}
 
-\item{n}{A numeric vector of total sample sizes corresponding to each age group.}
+\item{n}{A numeric vector of total sample sizes for each age group or interval.}
 }
 \value{
-A list with the following elements:
+A list with:
 \describe{
-\item{\code{par}}{Named list of maximum likelihood estimates: \code{foi_y}, \code{foi_o}.}
-\item{\code{CIs}}{Named list of 95\% bootstrap confidence intervals for each parameter.}
-\item{\code{boot_params}}{Named list containing the bootstrap samples for \code{foi_y} and \code{foi_o}.}
+\item{par}{Maximum likelihood estimates for \code{foi_y} (FOI under age 13) and \code{foi_o} (FOI from age 13 onward).}
+\item{CIs}{Bootstrap-based 95\% confidence intervals for each parameter.}
+\item{boot_params}{Bootstrap samples for \code{foi_y} and \code{foi_o}.}
 }
 }
 \description{
-Fits a piecewise constant force of infection (FOI) catalytic model assuming full assay sensitivity (\eqn{ρ = 1}).
+Fits a catalytic model with a piecewise constant force of infection (FOI), assuming full assay sensitivity (\eqn{\rho = 1}).
+This model separates the population into two age groups: younger individuals (\eqn{t < 13}) and older individuals (\eqn{t \geq 13}),
+each with its own FOI parameter.
 }
 \details{
-The seroprevalence function is modeled as:
+The seroprevalence function is defined as:
 \deqn{
 \pi(t) =
 \begin{cases}
@@ -34,5 +36,24 @@ The seroprevalence function is modeled as:
 \end{cases}
 }
 
-This structure captures different FOI values for children (\eqn{\lambda_y}) and older individuals (\eqn{\lambda_o}).
+For age intervals \eqn{[a, b]}, the model integrates \eqn{\pi(t)} over the interval and returns the average value.
+
+This model captures age-dependent transmission with a structural breakpoint at age 13. It is a special case of Model A,
+assuming perfect assay sensitivity and that all infections result in detectable seroconversion.
+}
+\examples{
+# Example with exact ages
+t <- 1:20
+y <- round(10 * (1 - exp(-0.3 * pmin(t - 0.5, 12.5) - 0.2 * pmax(0, t - 13))))
+n <- rep(10, length(t))
+result <- VynnyckyB(t, y, n)
+result$par
+
+# Example with age intervals
+age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15, 15,20), ncol=2, byrow=TRUE)
+y <- c(1, 3, 6, 8, 9)
+n <- rep(10, 5)
+result <- VynnyckyB(age_intervals, y, n)
+result$CIs
+
 }

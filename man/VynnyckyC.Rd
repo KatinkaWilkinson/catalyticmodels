@@ -7,28 +7,51 @@
 VynnyckyC(t, y, n)
 }
 \arguments{
-\item{t}{A numeric vector of age groups.}
+\item{t}{A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.}
 
-\item{y}{A numeric vector of seropositive counts corresponding to each age group.}
+\item{y}{A numeric vector of seropositive counts for each age group or interval.}
 
-\item{n}{A numeric vector of total sample sizes corresponding to each age group.}
+\item{n}{A numeric vector of total sample sizes for each age group or interval.}
 }
 \value{
-A list with the following components:
+A list with:
 \describe{
-\item{\code{par}}{Named list of maximum likelihood estimates: \code{rho} (assay sensitivity) and \code{foi} (force of infection).}
-\item{\code{CIs}}{Named list of 95\\% bootstrap confidence intervals for \code{rho} and \code{foi}.}
-\item{\code{boot_params}}{Named list containing the bootstrap samples for \code{rho} and \code{foi}.}
+\item{par}{Maximum likelihood estimates for \code{rho} (assay sensitivity) and \code{foi} (force of infection).}
+\item{CIs}{Bootstrap-based 95\% confidence intervals for each parameter.}
+\item{boot_params}{Bootstrap samples for \code{rho} and \code{foi}.}
 }
 }
 \description{
-Fits a catalytic model assuming a constant force of infection (FOI) across all ages, while allowing for imperfect assay sensitivity (\eqn{ρ}).
+Implements a catalytic model assuming a constant force of infection (FOI) across all ages,
+while allowing for imperfect assay sensitivity \eqn{\rho}.
 }
 \details{
-The seroprevalence function is modeled as:
+The seroprevalence function is defined as:
 \deqn{
-\pi(t) = \rho \cdot \left(1 - \exp(-\lambda \cdot (t - 0.5))\right)
+\pi(t) = \rho \left(1 - \exp(-\lambda (t - 0.5))\right)
 }
 
-This model allows for a single FOI parameter (\eqn{\lambda}) and a sensitivity parameter (\eqn{\rho}) representing the proportion of past infections correctly detected by the assay.
+This structure includes a sensitivity parameter (\eqn{\rho}) that accounts for imperfect detection or partial immunity,
+and a constant FOI parameter (\eqn{\lambda}) representing the infection rate across all ages.
+
+For age intervals \eqn{[a, b]}, the model computes the average seroprevalence by numerically integrating \eqn{\pi(t)} over the interval.
+
+This model is suitable in settings where the transmission intensity is assumed to be stable across ages
+and not all infections result in detectable antibody responses.
+}
+\examples{
+# Example with exact ages
+t <- 1:15
+y <- round(10 * (1 - exp(-0.4 * (t - 0.5))))
+n <- rep(10, length(t))
+result <- VynnyckyC(t, y, n)
+result$par
+
+# Example with age intervals
+age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15), ncol=2, byrow=TRUE)
+y <- c(1, 3, 6, 8)
+n <- rep(10, 4)
+result <- VynnyckyC(age_intervals, y, n)
+result$CIs
+
 }
