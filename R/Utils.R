@@ -23,17 +23,23 @@
 synthesise_raw_data <- function(t, y, n) {
   if (is.matrix(t) && ncol(t) == 2) {
     # Age intervals
-    raw_t <- numeric(sum(n))
+    raw_t <- numeric(sum(n))  # storage for ages
     raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
-    current_index <- 1
 
+    current_index <- 1
     for (i in 1:nrow(t)) {
       num_people <- n[i]
       num_positive <- y[i]
       num_negative <- n[i] - y[i]
-      ages <- runif(num_people, min = t[i, 1], max = t[i, 2])  # Sample uniformly in interval
+
+      # Integer ages only (discrete uniform sampling)
+      age_range <- floor(t[i, 1]):ceiling(t[i, 2] - 1)
+      if (length(age_range) == 0) age_range <- floor(t[i, 1])  # handle narrow bins
+      ages <- sample(age_range, size = num_people, replace = TRUE)
+
       sero_results <- c(rep(1, num_positive), rep(0, num_negative))
-      sero_results <- sample(sero_results)  # Shuffle
+      sero_results <- sample(sero_results) # shuffle sero results
+
       raw_data[current_index:(current_index + num_people - 1), ] <- data.frame(
         t = ages,
         `Sero-result` = sero_results
@@ -41,9 +47,9 @@ synthesise_raw_data <- function(t, y, n) {
       current_index <- current_index + num_people
     }
   } else {
-    # Point data
     raw_t <- rep(t, n)
     raw_data <- data.frame(t = raw_t, `Sero-result` = 0)
+
     for (i in 1:length(t)) {
       start_pt <- sum(n[1:(i - 1)]) + 1
       end_pt <- start_pt + y[i] - 1
@@ -106,17 +112,37 @@ synthesise_count_data <- function(t, seroresult) {
 #' create_boot_samps(t, y, n, num_boot = 100)
 #'
 #' @export
-create_boot_samps <- function(t, y, n, num_boot){ # returns the count data from bootstrapping on raw data
+create_boot_samps <- function(t, y, n, num_boot){
   set.seed(123)
   raw_dat <- synthesise_raw_data(t, y, n)
   boot_results <- list()
+
   for (b in 1:num_boot) {
-    ind <- sample(1:nrow(raw_dat), nrow(raw_dat), replace=TRUE)
-    boot_raw_dat <- raw_dat[ind,]
-    boot_t <- sort(unique(t))
-    boot_y <- sapply(boot_t, function(tt) sum(boot_raw_dat[boot_raw_dat[,1] == tt, 2]))
-    boot_n <- sapply(boot_t, function(tt) sum(boot_raw_dat[,1] == tt))
-    boot_results[[b]] <- list(t=boot_t, y=boot_y, n=boot_n)
+    ind <- sample(1:nrow(raw_dat), nrow(raw_dat), replace = TRUE)
+    boot_raw_dat <- raw_dat[ind, ]
+
+    if (is.matrix(t)) {
+      # Recreate the same intervals
+      age_intervals <- t
+      boot_y <- numeric(nrow(age_intervals))
+      boot_n <- numeric(nrow(age_intervals))
+      for (i in 1:nrow(age_intervals)) {
+        lower <- age_intervals[i, 1]
+        upper <- age_intervals[i, 2]
+        in_interval <- boot_raw_dat$t >= lower & boot_raw_dat$t < upper
+        boot_y[i] <- sum(boot_raw_dat$`Sero-result`[in_interval])
+        boot_n[i] <- sum(in_interval)
+      }
+      boot_results[[b]] <- list(t = age_intervals, y = boot_y, n = boot_n)
+
+    } else {
+      # For exact ages
+      boot_t <- sort(unique(t))
+      boot_y <- sapply(boot_t, function(tt) sum(boot_raw_dat[boot_raw_dat[,1] == tt, 2]))
+      boot_n <- sapply(boot_t, function(tt) sum(boot_raw_dat[,1] == tt))
+      boot_results[[b]] <- list(t = boot_t, y = boot_y, n = boot_n)
+    }
   }
+
   return(boot_results)
 }
