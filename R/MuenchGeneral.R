@@ -47,7 +47,7 @@ MuenchGeneral <- function(t, y, n) {
     if (is.matrix(t) && ncol(t) == 2) { # in this case we are working with a matrix
       a <- t[,1]
       b <- t[,2]
-      pi_t <- k(l + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a)) ) # integral of pi_t function over the range [a,b]
+      pi_t <- k * (l + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a)) ) # integral of pi_t function over the range [a,b]
     } else { # t is a vector
       pi_t <- k * (l - exp(-foi*t))
     }

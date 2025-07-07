@@ -11,4 +11,6 @@ RoxygenNote: 7.3.2
 URL: https://github.com/KatinkaWilkinson/catalyticmodels
 BugReports: https://github.com/KatinkaWilkinson/catalyticmodels/issues
 Imports: 
-    Iso
+    Iso,
+    future,
+    future.apply
