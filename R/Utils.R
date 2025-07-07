@@ -56,7 +56,7 @@ create_boot_samps <- function(t, y, n, num_boot) {
 
   return(boot_list)
 }
-create_boot_samps(t, y, n, num_boot)
+
 #
 # create_boot_samps_old_and_incorrect <- function(t, y, n, num_boot){
 #   set.seed(123)
