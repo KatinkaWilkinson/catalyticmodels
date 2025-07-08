@@ -2,7 +2,7 @@
 % Please edit documentation in R/Utils.R
 \name{create_boot_samps}
 \alias{create_boot_samps}
-\title{Generate Bootstrap Resamples from Count Data}
+\title{ALTER THIS LATER: Generate Bootstrap Resamples from Count Data}
 \usage{
 create_boot_samps(t, y, n, num_boot)
 }
