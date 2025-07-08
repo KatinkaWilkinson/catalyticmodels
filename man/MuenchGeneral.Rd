@@ -7,7 +7,7 @@
 MuenchGeneral(t, y, n)
 }
 \arguments{
-\item{t}{A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.}
+\item{t}{A one column matrix containing exact values, or a matrix with two columns giving the lower and upper bounds of age intervals.}
 
 \item{y}{A numeric vector of seropositive counts for each age group or interval.}
 
@@ -37,7 +37,7 @@ It is useful in real-world settings where heterogeneity in exposure or immunity 
 }
 \examples{
 # Example with exact ages
-t <- 1:10
+t <- matrix(1:10, ncol = 1)
 y <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 n <- rep(10, length(t))
 result <- MuenchGeneral(t, y, n)

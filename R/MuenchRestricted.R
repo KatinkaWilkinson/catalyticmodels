@@ -41,7 +41,7 @@
 MuenchRestricted <- function(t, y, n) {
   loglik <- function(par, t, y, n) {
     foi <- par[1]
-    if (is.matrix(t) && ncol(t) == 2) { # in this case we are working with a matrix
+    if (ncol(t) == 2) { # age buckets
       a <- t[,1]
       b <- t[,2]
       pi_t <- 1 + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a))  # integral of pi_t function over the range [a,b]
@@ -55,7 +55,7 @@ MuenchRestricted <- function(t, y, n) {
 
   # MLE
   par_init <- c(foi=0.1)
-  params <- optim(par = par_init, fn = loglik, t=t, y=y, n=n)$par
+  params <- optim(par = par_init, fn = loglik, method = "Brent", lower = 0, upper = 5, t=t, y=y, n=n)$par # according to the optim-generated warning message, Nelder-Mead optimization (the default) is unreliable for 1D optimisation, therefore use Brent for optimising one variable. - DID I CHOOSE THE LOWER AND UPPER BOUNDS CORRECTLY>???
 
   # 95% bootstrap CIs
   boot_num <- 1000
@@ -67,7 +67,7 @@ MuenchRestricted <- function(t, y, n) {
     bootsamp_y <- boot_samp$y
     bootsamp_n <- boot_samp$n
     bootsamp_params <- tryCatch(
-      optim(par = par_init, fn = loglik, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
+      optim(par = par_init, fn = loglik, method = "Brent", lower = 0, upper = 5, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
       error = function(e) rep(NA, 1)
     )
     boot_foi[b] <- bootsamp_params[1]

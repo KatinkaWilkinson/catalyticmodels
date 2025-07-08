@@ -55,7 +55,7 @@ VynnyckyB <- function(t, y, n) {
       1 - exp(-foi_y * pmin(t - 0.5, 12.5) - foi_o * pmax(0, t - 13))
     }
 
-    if (is.matrix(t) && ncol(t) == 2) {
+    if (ncol(t) == 2) {
       a <- t[, 1]
       b <- t[, 2]
       integrate_pi <- function(a, b, foi_y, foi_o) {

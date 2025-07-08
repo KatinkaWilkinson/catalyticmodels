@@ -49,7 +49,7 @@ VynnyckyD <- function(t, y, n) {
       1 - exp(-foi * (t - 0.5))
     }
 
-    if (is.matrix(t) && ncol(t) == 2) {
+    if (ncol(t) == 2) {
       a <- t[, 1]
       b <- t[, 2]
       integrate_pi <- function(a, b, foi) {
@@ -71,7 +71,7 @@ VynnyckyD <- function(t, y, n) {
 
   # MLE
   par_init <- c(foi = 0.5)
-  params <- optim(par=par_init, fn=loglik, t=t, y=y, n=n)$par
+  params <- optim(par=par_init, fn=loglik, method = "Brent", lower = 0, upper = 5, t=t, y=y, n=n)$par
 
   # 95% bootstrap CIs
   boot_num <- 1000
@@ -83,7 +83,7 @@ VynnyckyD <- function(t, y, n) {
     bootsamp_y <- boot_samp$y
     bootsamp_n <- boot_samp$n
     bootsamp_params <- tryCatch(
-      optim(par = par_init, fn = loglik, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
+      optim(par = par_init, fn = loglik, method = "Brent", lower = 0, upper = 5, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
       error = function(e) rep(NA, 1)
     )
     boot_foi[b] <- bootsamp_params[1]

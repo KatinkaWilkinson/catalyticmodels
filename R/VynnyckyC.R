@@ -53,7 +53,7 @@ VynnyckyC <- function(t, y, n) {
       rho * (1 - exp(-foi * (t - 0.5)))
     }
 
-    if (is.matrix(t) && ncol(t) == 2) {
+    if (ncol(t) == 2) {
       a <- t[, 1]
       b <- t[, 2]
       integrate_pi <- function(a, b, rho, foi) {

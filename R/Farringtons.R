@@ -12,11 +12,11 @@ Farringtons <- function(t, y, n) {
     ll <- y*log(pi_t) + (n-y)*log(1-pi_t)
     return(- sum(ll))
   }
-  
+
   # MLE
   par_init <- c(gamma0 = 0.1, gamma1 = 1, gamma2 = 0.1)
   params <- optim(par=par_init, fn=loglik, t=t, y=y, n=n)$par
-  
+
   # 95% bootstrap CIs
   boot_num <- 1000
   boot_gamma0 <- numeric(length=boot_num)
@@ -39,6 +39,6 @@ Farringtons <- function(t, y, n) {
   gamma0_CI <- quantile(boot_gamma0, probs = c(0.025, 0.975), na.rm = TRUE)
   gamma1_CI <- quantile(boot_gamma1, probs = c(0.025, 0.975), na.rm = TRUE)
   gamma2_CI <- quantile(boot_gamma2, probs = c(0.025, 0.975), na.rm = TRUE)
-  
+
   return(list(par=list(gamma0=params[1], gamma1=params[2], gamma2=params[3]), CIs=list(gamma0_CI=gamma0_CI, gamma1_CI=gamma1_CI, gamma2_CI=gamma2_CI), boot_params=list(boot_gamma0=boot_gamma0, boot_gamma1=boot_gamma1, boot_gamma2=boot_gamma2)))
 }

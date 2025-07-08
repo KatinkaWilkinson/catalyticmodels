@@ -49,7 +49,7 @@ Griffiths <- function(t, y, n, tau) {
   loglik <- function(par, tau, t, y, n) {
     gamma0 <- par[1]
     gamma1 <- par[2]
-    if (is.matrix(t) && ncol(t) == 2) { # in this case we are working with a matrix
+    if (ncol(t) == 2) { # in this case we are working with a matrix
       a <- t[,1]
       b <- t[,2]
 

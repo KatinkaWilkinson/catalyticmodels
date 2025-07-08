@@ -9,7 +9,7 @@
 #' For age intervals \eqn{[a, b]}, the model computes the average value of \eqn{\pi(t)} over the interval using:
 #' \deqn{\bar{\pi}_{[a,b]} = k \left(l - \frac{e^{-\lambda a} - e^{-\lambda b}}{\lambda(b - a)}\right)}
 #'
-#' @param t A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.
+#' @param t A one column matrix containing exact values, or a matrix with two columns giving the lower and upper bounds of age intervals.
 #' @param y A numeric vector of seropositive counts for each age group or interval.
 #' @param n A numeric vector of total sample sizes for each age group or interval.
 #'
@@ -26,7 +26,7 @@
 #'
 #' @examples
 #' # Example with exact ages
-#' t <- 1:10
+#' t <- matrix(1:10, ncol = 1)
 #' y <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 #' n <- rep(10, length(t))
 #' result <- MuenchGeneral(t, y, n)
@@ -44,7 +44,7 @@ MuenchGeneral <- function(t, y, n) {
     k <- par[1]
     l <- par[2]
     foi <- par[3]
-    if (is.matrix(t) && ncol(t) == 2) { # in this case we are working with a matrix
+    if (ncol(t) == 2) { # age buckets
       a <- t[,1]
       b <- t[,2]
       pi_t <- k * (l + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a)) ) # integral of pi_t function over the range [a,b]
