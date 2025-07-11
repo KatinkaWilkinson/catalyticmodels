@@ -68,7 +68,6 @@ MuenchRestricted <- function(t, y, n, par_init = c(foi=0.1), search_range = c(lo
 
   # 95% bootstrap CIs
   boot_num <- 1000
-  boot_foi <- numeric(length=boot_num)
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num)
 
   boot_results <- lapply(1:boot_num, function(b) {

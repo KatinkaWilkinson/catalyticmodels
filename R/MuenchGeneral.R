@@ -69,9 +69,6 @@ MuenchGeneral <- function(t, y, n) {
 
   # bootstrap CIs:
   boot_num <- 1000
-  boot_k <- numeric(length=boot_num)
-  boot_l <- numeric(length=boot_num)
-  boot_foi <- numeric(length=boot_num)
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num)
 
   # boot_results is a list of length equal to the number of bootstrap samples.
