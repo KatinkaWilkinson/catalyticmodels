@@ -32,28 +32,9 @@ The FOI is defined as: \eqn{\lambda(t) = \gamma_0(t + \gamma_1)\mathbf{1}\{t > \
 The cumulative probability of seroconversion is then:
 \deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(w) dw\right)}
 
-For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals \link{a, b}, the model integrates \eqn{\pi(t)} over the interval
+For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals [a, b], the model integrates \eqn{\pi(t)} over the interval
 and returns the average value.
 
 This model is suitable when infection dynamics are known to be negligible during early life due to maternal immunity,
 and begin increasing with age thereafter.
-}
-\examples{
-# Example using exact ages
-set.seed(123)
-t_exact <- 1:10
-y <- c(0, 0, 1, 2, 3, 4, 5, 6, 7, 8)
-n <- rep(10, length(t_exact))
-tau <- 2
-result1 <- Griffiths(t_exact, y, n, tau)
-result1$par
-
-# Example using age intervals
-t_intervals <- matrix(c(0,1, 1,2, 2,3, 3,4, 4,5), ncol = 2, byrow = TRUE)
-y_int <- c(0, 0, 1, 2, 3)
-n_int <- rep(10, 5)
-tau <- 1
-result2 <- Griffiths(t_intervals, y_int, n_int, tau)
-result2$CIs
-
 }

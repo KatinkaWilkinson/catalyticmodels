@@ -39,19 +39,3 @@ For age intervals \eqn{[a, b]}, the model computes the average seroprevalence by
 This model is especially useful in seroepidemiological studies where transmission intensity differs by age,
 and not all infections lead to seroconversion (or detection), which is captured by the \code{rho} parameter.
 }
-\examples{
-# Example with exact ages
-t <- 1:20
-y <- round(10 * (1 - exp(-0.3 * pmin(t - 0.5, 12.5) - 0.2 * pmax(0, t - 13))))
-n <- rep(10, length(t))
-result <- VynnyckyA(t, y, n)
-result$par
-
-# Example with age intervals
-age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15, 15,20), ncol=2, byrow=TRUE)
-y <- c(1, 3, 6, 8, 9)
-n <- rep(10, 5)
-result <- VynnyckyA(age_intervals, y, n)
-result$CIs
-
-}

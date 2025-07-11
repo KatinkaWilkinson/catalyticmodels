@@ -23,6 +23,7 @@
 #' }
 #' Bootstrap resampling is used to estimate uncertainty.
 #'
+#' @importFrom Iso pava
 #' @export
 NonparametricKeidings <- function(t, y, n) {
   ord <- order(t) # pava assumes ts are ordered

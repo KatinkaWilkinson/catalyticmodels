@@ -1,58 +1,66 @@
-#' ALTER THIS LATER: Generate Bootstrap Resamples from Count Data
+#' Generate Bootstrap Resamples from Grouped Binary Serological Data
 #'
-#' Produces a list of bootstrap resamples by sampling with replacement from the pseudo-individual-level data.
-#' Each resample is returned in aggregated count form.
+#' Efficiently generates bootstrap resamples of seropositive counts using grouped binary data derived from count data.
+#' The input \code{t} can either be a vector of exact ages or a matrix representing age intervals (e.g., \[a, b\] per row).
 #'
-#' @param t A numeric vector of ages (or identifiers for age groups).
-#' @param y A numeric vector of seropositive counts for each age group.
-#' @param n A numeric vector of total sample sizes for each age group.
-#' @param num_boot Number of bootstrap resamples to generate.
+#' This function does **not** disaggregate the data (e.g., using Beers, PCLM, or interpolation). All bootstrap samples are created
+#' within the original age groupings — preserving the structure of the input data.
 #'
-#' @return A list of length \code{num_boot}. Each element is itself a list with:
+#' For each age group, a binary vector is constructed representing individual-level serostatus (1 = seropositive, 0 = seronegative),
+#' and bootstrap samples are drawn with replacement \code{num_boot} times. Parallel processing across age groups is done using
+#' \code{future.apply::future_lapply()}.
+#'
+#' @param t A numeric vector of exact ages, or a matrix with two columns representing lower and upper bounds of age intervals.
+#' @param y A numeric vector of seropositive counts for each age group or interval.
+#' @param n A numeric vector of total sample sizes for each age group or interval.
+#' @param num_boot Integer specifying the number of bootstrap resamples to generate.
+#'
+#' @return A list of length \code{num_boot}. Each element is itself a list containing:
 #' \describe{
-#'   \item{\code{t}}{Vector of unique age values in the bootstrap sample.}
-#'   \item{\code{y}}{Bootstrap seropositive counts.}
-#'   \item{\code{n}}{Bootstrap total sample sizes.}
+#'   \item{\code{t}}{The original age structure passed to the function — either a vector or a matrix of intervals.}
+#'   \item{\code{y}}{Bootstrapped seropositive counts corresponding to each age group or interval.}
+#'   \item{\code{n}}{Total sample sizes for each age group or interval (unchanged across bootstraps).}
 #' }
 #'
-#' @examples
-#' t <- c(1, 2, 3)
-#' y <- c(2, 3, 4)
-#' n <- c(4, 5, 6)
-#' create_boot_samps(t, y, n, num_boot = 100)
+#' @details
+#' This method is designed for situations where the age data is already grouped and should remain so throughout inference.
 #'
+#' @examples
+#' # Example with exact ages
+#' t_vec <- c(1, 2, 3)
+#' y_vec <- c(2, 3, 4)
+#' n_vec <- c(4, 5, 6)
+#' boot_samples1 <- create_boot_samps(t_vec, y_vec, n_vec, num_boot = 100)
+#'
+#' # Example with age intervals
+#' t_mat <- matrix(c(0,5, 5,10, 10,15), ncol = 2, byrow = TRUE)
+#' y <- c(5, 10, 15)
+#' n <- c(10, 20, 25)
+#' boot_samples2 <- create_boot_samps(t_mat, y, n, num_boot = 100)
+#'
+#' @importFrom future plan multisession
+#' @importFrom future.apply future_lapply
 #' @export
 create_boot_samps <- function(t, y, n, num_boot) {
   stopifnot(requireNamespace("future.apply", quietly = TRUE))
   future::plan(future::multisession)
 
-  # Step 1: Build binary data for each age group
-  binary_dat <- mapply(function(yi, ni) {
-    c(rep(1, yi), rep(0, ni - yi))
-  }, y, n, SIMPLIFY = FALSE)
+  # binary_dat is a list where each entry is a binary vector of data for one age group
+  binary_dat <- mapply(function(yi, ni) {c(rep(1, yi), rep(0, ni - yi))}, y, n, SIMPLIFY = FALSE)
 
-  # Step 2: Bootstrap positive counts for each group
-  # One parallel job per group: replicate num_boot times
-  group_boots <- future.apply::future_lapply(
-    binary_dat,
-    function(bin_dat) {
-      replicate(num_boot, sum(sample(bin_dat, replace = TRUE)))
-    },
-    future.seed = TRUE
+  # For each element in the binary_dat list (representing the binary sero data for a single age group/category), we draw num_boot bootstrap samples with replacement and sum the values in each sample to obtain num_boot bootstrapped seropositive counts. future_lapply creates a different thread for each element in the list (each age category), so that each thread is working on generating num_boot bootstrapped y values for one of the age categories. Group_boots is now a list where each element is a vector of num_boot y values
+  group_boots <- future.apply::future_lapply(binary_dat,
+    function(bin_dat) {replicate(num_boot, sum(sample(bin_dat, replace = TRUE)))},
+    future.seed = TRUE # for safe parallel use of random numbers in sample() func
   )
 
-  # Step 3: Combine bootstraps by sample (i.e., row-wise)
-  # Each row becomes one bootstrap dataset
+  # Combine the list of bootstrap vectors into a matrix: rows correspond to bootstrap iterations, columns to age groups
   boot_y_matrix <- do.call(cbind, group_boots)
 
-  # Step 4: Create a list of bootstrap datasets
-  boot_list <- lapply(1:num_boot, function(i) {
-    list(
-      t = t,
-      y = boot_y_matrix[i, ],
-      n = n
-    )
-  })
+  # We want the output of the function to be a list where each element in the list is itself a list containing the t, y, n triplet for one bootstrap sample.
+  boot_list <- lapply(1:num_boot, function(i) {list(t = t, y = boot_y_matrix[i, ], n = n)})
+
+  future::plan(future::sequential) # close plan
 
   return(boot_list)
 }

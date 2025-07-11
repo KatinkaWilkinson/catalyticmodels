@@ -39,19 +39,3 @@ For age intervals \eqn{[a, b]}, the model computes the average seroprevalence by
 This model is suitable in settings where the transmission intensity is assumed to be stable across ages
 and not all infections result in detectable antibody responses.
 }
-\examples{
-# Example with exact ages
-t <- 1:15
-y <- round(10 * (1 - exp(-0.4 * (t - 0.5))))
-n <- rep(10, length(t))
-result <- VynnyckyC(t, y, n)
-result$par
-
-# Example with age intervals
-age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15), ncol=2, byrow=TRUE)
-y <- c(1, 3, 6, 8)
-n <- rep(10, 4)
-result <- VynnyckyC(age_intervals, y, n)
-result$CIs
-
-}

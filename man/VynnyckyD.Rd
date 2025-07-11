@@ -36,19 +36,3 @@ For age intervals \eqn{[a, b]}, the model integrates \eqn{\pi(t)} across the int
 This model is a simplified version of the Muench catalytic model, suitable when assay sensitivity is known to be perfect.
 It is appropriate in settings where all infections are detectable and transmission is age-independent.
 }
-\examples{
-# Example with exact ages
-t <- 1:15
-y <- round(10 * (1 - exp(-0.3 * (t - 0.5))))
-n <- rep(10, length(t))
-result <- VynnyckyD(t, y, n)
-result$par
-
-# Example with age intervals
-age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15), ncol=2, byrow=TRUE)
-y <- c(1, 3, 6, 8)
-n <- rep(10, 4)
-result <- VynnyckyD(age_intervals, y, n)
-result$CIs
-
-}

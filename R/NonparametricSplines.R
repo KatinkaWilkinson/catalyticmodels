@@ -28,6 +28,7 @@
 #' Note: This version assumes input ages represent point values. To extend this to age intervals,
 #' one could integrate the spline over each interval or use midpoints as proxies.
 #'
+#' @importFrom stats predict smooth.spline
 #' @export
 NonparametricSplines <- function(t, y, n) {
   spline_pi_t <- smooth.spline(t, y/n) # models how seropositive changes with age

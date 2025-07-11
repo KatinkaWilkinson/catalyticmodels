@@ -38,6 +38,7 @@
 #' n <- rep(10, 5)
 #' result <- MuenchGeneral(age_intervals, y, n)
 #'
+#' @importFrom stats optim quantile dbinom
 #' @export
 MuenchGeneral <- function(t, y, n) {
   loglik <- function(par, t, y, n) {
@@ -47,18 +48,23 @@ MuenchGeneral <- function(t, y, n) {
     if (ncol(t) == 2) { # age buckets
       a <- t[,1]
       b <- t[,2]
-      pi_t <- k * (l + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a)) ) # integral of pi_t function over the range [a,b]
-    } else { # t is a vector
+
+      valid <- (b - a) > 0 # if this happens then you will end up dividing by zero below! Therefore check for invalid age buckets
+      if (any(!valid)) stop("Invalid interval with zero width detected.")
+
+      pi_t <- k * (l + (exp(-foi*b)-exp(-foi*a)) / (foi*(b-a)) ) # estimate pi_t as the mean of the catalytic function over the range [a,b]. See working out in goodnotes. Comes from 1/(b-a) * integral (a to b) pi(t) dt. I avoided using the integrate function because it is less computationally efficient
+    } else { # t represents exact ages (if ncol(t)==1)
       pi_t <- k * (l - exp(-foi*t))
     }
     pi_t <- pmin(pmax(pi_t, 1e-8), 1 - 1e-8) # to ensure that you don't get a pi_t of 0 or 1 - this avoids a log(0) error
     ll <- dbinom(y, size = n, prob = pi_t, log = TRUE) # I replaced y*log(pi_t) + (n-y)*log(1-pi_t) with dbinom since the function is more robust
 
+    # recall that we are always working with vectors: t, y, n, pi_t, and ll are all vectors. Therefore, the total log likelihood over all the observations = sum(ll)
     return(- sum(ll)) # return negative since optim minimises
   }
 
   # MLE: maximise the loglik with optim
-  par_init <- c(k=0.5, l=1, foi=0.1)
+  par_init <- c(k=0.5, l=1, foi=0.1) # do start values matter? Might be worth looking into, but maybe not the most important thing. Possible solutions: consider adding a check to rerun optim() with different starts if convergence fails or allow the user to optionally provide initial values.
   params <- optim(par = par_init, fn = loglik, t=t, y=y, n=n)$par
 
   # bootstrap CIs:
@@ -68,19 +74,29 @@ MuenchGeneral <- function(t, y, n) {
   boot_foi <- numeric(length=boot_num)
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num)
 
-  for (b in 1:boot_num){
+  # boot_results is a list of length equal to the number of bootstrap samples.
+  # Each element is a list of the form list(k, l, foi), returned by optim for that sample.
+  # Note: originally I did not check for convergence but then chat pointed this out: Some bootstraps might yield degenerate groups (e.g., all 0 or all 1 in a bin), which makes MLE unstable. Consider adding a convergence check
+  boot_results <- lapply(1:boot_num, function(b) {
     boot_samp <- bootstrap_samples[[b]]
-    bootsamp_t <- boot_samp$t
-    bootsamp_y <- boot_samp$y
-    bootsamp_n <- boot_samp$n
-    bootsamp_params <- tryCatch(
-      optim(par = par_init, fn = loglik, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
-      error = function(e) rep(NA, 3)
+
+    result <- tryCatch(
+      optim(par = par_init, fn = loglik, t = boot_samp$t, y = boot_samp$y, n = boot_samp$n),
+      error = function(e) NULL
     )
-    boot_k[b] <- bootsamp_params[1]
-    boot_l[b] <- bootsamp_params[2]
-    boot_foi[b] <- bootsamp_params[3]
-  }
+
+    if (is.null(result) || result$convergence != 0) {
+      return(rep(NA, 3))  # return NA if error occurred or convergence failed
+    } else {
+      return(result$par)  # return the estimated parameters
+    }
+  })
+
+  # lapply always outputs a list, while sapply (simplify apply, a wrapped function for lapply that simplifies the list output) simplifies the output into a vector/matrix
+  boot_k <- sapply(boot_results, function(x) x[[1]]) # pull out all the first elements in each list contained in boot_results, and place all the
+  boot_l <- sapply(boot_results, function(x) x[[2]])
+  boot_foi <- sapply(boot_results, function(x) x[[3]])
+
   k_CI <- quantile(boot_k, probs = c(0.025, 0.975), na.rm = TRUE)
   l_CI <- quantile(boot_l, probs = c(0.025, 0.975), na.rm = TRUE)
   foi_CI <- quantile(boot_foi, probs = c(0.025, 0.975), na.rm = TRUE)

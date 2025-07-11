@@ -1,3 +1,34 @@
+#' Farrington’s Catalytic Model for Seroprevalence
+#'
+#' Fits a flexible catalytic model in which the force of infection (FOI) is governed by three parameters: \eqn{\gamma_0}, \eqn{\gamma_1}, and \eqn{\gamma_2}.
+#' This model allows the FOI to vary non-linearly with age and includes saturation behavior.
+#'
+#' The force of infection function is:
+#' \deqn{\lambda(t) = (\gamma_0 t + \gamma_1) \exp(-\gamma_2 t) + \gamma_1}
+#'
+#' The cumulative probability of infection by age \eqn{t} is:
+#' \deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(s) ds\right)}
+#'
+#' This model is suitable when the FOI is expected to increase initially and then decline, reflecting waning exposure or susceptibility with age.
+#'
+#' @param t A numeric vector of exact ages or midpoints of age intervals.
+#' @param y A numeric vector of seropositive counts for each age or age group.
+#' @param n A numeric vector of total sample sizes for each age or age group.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{\code{par}}{Maximum likelihood estimates of \code{gamma0}, \code{gamma1}, and \code{gamma2}.}
+#'   \item{\code{CIs}}{Bootstrap-based 95% confidence intervals for each parameter.}
+#'   \item{\code{boot_params}}{Bootstrap samples for each parameter.}
+#' }
+#'
+#' @details
+#' The model estimates the seroprevalence curve by integrating a non-linear FOI function over age. Confidence intervals are computed via nonparametric bootstrap resampling using the `create_boot_samps()` function.
+#'
+#' If the input `t` is based on age intervals, ensure midpoints are used or modify the function to integrate over intervals.
+#'
+#' @importFrom stats optim quantile integrate dbinom
+#' @export
 Farringtons <- function(t, y, n) {
   loglik <- function(par, t, y, n) {
     gamma0 <- par[1]

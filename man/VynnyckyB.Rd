@@ -41,19 +41,3 @@ For age intervals \eqn{[a, b]}, the model integrates \eqn{\pi(t)} over the inter
 This model captures age-dependent transmission with a structural breakpoint at age 13. It is a special case of Model A,
 assuming perfect assay sensitivity and that all infections result in detectable seroconversion.
 }
-\examples{
-# Example with exact ages
-t <- 1:20
-y <- round(10 * (1 - exp(-0.3 * pmin(t - 0.5, 12.5) - 0.2 * pmax(0, t - 13))))
-n <- rep(10, length(t))
-result <- VynnyckyB(t, y, n)
-result$par
-
-# Example with age intervals
-age_intervals <- matrix(c(0,2, 2,5, 5,10, 10,15, 15,20), ncol=2, byrow=TRUE)
-y <- c(1, 3, 6, 8, 9)
-n <- rep(10, 5)
-result <- VynnyckyB(age_intervals, y, n)
-result$CIs
-
-}
