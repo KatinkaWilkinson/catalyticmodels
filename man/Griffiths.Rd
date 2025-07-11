@@ -4,7 +4,14 @@
 \alias{Griffiths}
 \title{Griffiths' Age-Structured FOI Model with Maternal Antibody Cutoff τ}
 \usage{
-Griffiths(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1))
+Griffiths(
+  t,
+  y,
+  n,
+  tau,
+  par_init = c(gamma0 = 0.1, gamma1 = 1),
+  boot_num = 1000
+)
 }
 \arguments{
 \item{t}{A matrix of ages. For exact ages, use a one-column matrix; for age intervals, use a matrix with two columns giving lower and upper bounds.}
@@ -16,6 +23,8 @@ Griffiths(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1))
 \item{tau}{A positive numeric value specifying the age (in the same units as \code{t}) at which maternal antibodies wane.}
 
 \item{par_init}{Optional named numeric vector of initial values for the parameters \code{gamma0} and \code{gamma1}.}
+
+\item{boot_num}{Number of bootstrap replicates to use for computing confidence intervals. Default is 1000.}
 }
 \value{
 A list with:
@@ -36,15 +45,14 @@ The FOI is defined as:
 The cumulative probability of seroconversion up to age \eqn{t} is:
 \deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(w) dw\right)}
 
-For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals [a, b], it computes the average
+For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals from \code{a} to \code{b}, it computes the average
 \eqn{\pi(t)} over the interval, which is used as the binomial success probability.
 
 This model is appropriate in settings where maternal immunity provides early protection, and susceptibility increases
 linearly with age once this protection wanes. FOI estimates and their confidence intervals are returned per age category,
 based on either exact ages or age intervals. The binomial log-likelihood is maximized, and uncertainty is estimated using a nonparametric bootstrap.
 
-Bootstrap-based FOI confidence intervals are computed by integrating the FOI function for each bootstrap sample,
-and then calculating the 2.5\% and 97.5\% quantiles across bootstrap replicates.
+The number of bootstrap replicates used to compute parameter and FOI confidence intervals can be controlled with the \code{boot_num} argument.
 }
 \note{
 This function requires a helper function \code{create_boot_samps()} that returns bootstrap samples in the form:
@@ -56,7 +64,7 @@ t <- matrix(c(1, 3, 5, 7, 9), ncol = 1)
 y <- c(0, 3, 6, 9, 10)
 n <- c(10, 10, 10, 10, 10)
 tau <- 2
-result <- Griffiths(t, y, n, tau)
+result <- Griffiths(t, y, n, tau, boot_num = 30) # kept low so that example can run quickly
 result$par
 result$CIs
 
@@ -64,7 +72,7 @@ result$CIs
 t_int <- matrix(c(0,2, 2,5, 5,10, 10,15, 15,20), ncol = 2, byrow = TRUE)
 y_int <- c(0, 2, 5, 8, 10)
 n_int <- rep(10, 5)
-result_int <- Griffiths(t_int, y_int, n_int, tau)
+result_int <- Griffiths(t_int, y_int, n_int, tau, boot_num = 30)
 result_int$par
 result_int$CIs
 

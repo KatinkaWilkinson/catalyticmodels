@@ -9,7 +9,7 @@
 #' The cumulative probability of seroconversion up to age \eqn{t} is:
 #' \deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(w) dw\right)}
 #'
-#' For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals \[a, b\], it computes the average
+#' For exact ages, the model directly evaluates \eqn{\pi(t)}. For age intervals from \code{a} to \code{b}, it computes the average
 #' \eqn{\pi(t)} over the interval, which is used as the binomial success probability.
 #'
 #' @param t A matrix of ages. For exact ages, use a one-column matrix; for age intervals, use a matrix with two columns giving lower and upper bounds.
@@ -17,6 +17,7 @@
 #' @param n A numeric vector of total individuals sampled in each age group or interval.
 #' @param tau A positive numeric value specifying the age (in the same units as \code{t}) at which maternal antibodies wane.
 #' @param par_init Optional named numeric vector of initial values for the parameters \code{gamma0} and \code{gamma1}.
+#' @param boot_num Number of bootstrap replicates to use for computing confidence intervals. Default is 1000.
 #'
 #' @return A list with:
 #' \describe{
@@ -30,8 +31,7 @@
 #' linearly with age once this protection wanes. FOI estimates and their confidence intervals are returned per age category,
 #' based on either exact ages or age intervals. The binomial log-likelihood is maximized, and uncertainty is estimated using a nonparametric bootstrap.
 #'
-#' Bootstrap-based FOI confidence intervals are computed by integrating the FOI function for each bootstrap sample,
-#' and then calculating the 2.5% and 97.5% quantiles across bootstrap replicates.
+#' The number of bootstrap replicates used to compute parameter and FOI confidence intervals can be controlled with the \code{boot_num} argument.
 #'
 #' @note This function requires a helper function \code{create_boot_samps()} that returns bootstrap samples in the form:
 #' \code{list(list(t = ..., y = ..., n = ...), ...)}.
@@ -42,7 +42,7 @@
 #' y <- c(0, 3, 6, 9, 10)
 #' n <- c(10, 10, 10, 10, 10)
 #' tau <- 2
-#' result <- Griffiths(t, y, n, tau)
+#' result <- Griffiths(t, y, n, tau, boot_num = 30) # kept low so that example can run quickly
 #' result$par
 #' result$CIs
 #'
@@ -50,13 +50,13 @@
 #' t_int <- matrix(c(0,2, 2,5, 5,10, 10,15, 15,20), ncol = 2, byrow = TRUE)
 #' y_int <- c(0, 2, 5, 8, 10)
 #' n_int <- rep(10, 5)
-#' result_int <- Griffiths(t_int, y_int, n_int, tau)
+#' result_int <- Griffiths(t_int, y_int, n_int, tau, boot_num = 30)
 #' result_int$par
 #' result_int$CIs
 #'
 #' @importFrom stats optim quantile integrate dbinom
 #' @export
-Griffiths <- function(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1)) {
+Griffiths <- function(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1), boot_num = 1000) {
   loglik <- function(par, tau, t, y, n) {
     gamma0 <- par[1]
     gamma1 <- par[2]
@@ -96,7 +96,6 @@ Griffiths <- function(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1)) {
   params <- optim(par=par_init, fn=loglik, tau=tau, t=t, y=y, n=n)$par
 
   # 95% bootstrap CIs
-  boot_num <- 100
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num)
 
   boot_results <- lapply(1:boot_num, function(b) {
@@ -129,7 +128,6 @@ Griffiths <- function(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1)) {
     foi_MLE <- mapply(function(s_lower, s_upper, gamma0, gamma1, tau) {1/(s_upper-s_lower) * integrate(function(s) {gamma0 * (s+gamma1)*(s>tau)}, lower = s_lower, upper = s_upper)$value}, s_lower = t[,1], s_upper = t[,2], MoreArgs = list(gamma0 = params[1], gamma1 = params[2], tau = tau))
     #names(foi_MLE) <- apply(t, 1, function(row) paste0("[", row[1], ",", row[2], ")"))
   }
-  print(foi_MLE)
 
   # foi confidence intervals confidence intervals
   if (ncol(t) == 1) {
@@ -152,7 +150,6 @@ Griffiths <- function(t, y, n, tau, par_init = c(gamma0 = 0.1, gamma1 = 1)) {
         return(integral / interval_length)
       })
 
-      # CI from the distribution of bootstrap FOIs
       quantile(boot_foi, probs = c(0.025, 0.975), na.rm = TRUE)
     })
   }

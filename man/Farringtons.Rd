@@ -2,39 +2,70 @@
 % Please edit documentation in R/Farringtons.R
 \name{Farringtons}
 \alias{Farringtons}
-\title{Farrington’s Catalytic Model for Seroprevalence}
+\title{Farrington's Time-Dependent Force of Infection Model}
 \usage{
-Farringtons(t, y, n)
+Farringtons(
+  t,
+  y,
+  n,
+  par_init = c(gamma0 = 0.1, gamma1 = 1, gamma2 = 0.1),
+  boot_num = 1000
+)
 }
 \arguments{
-\item{t}{A numeric vector of exact ages or midpoints of age intervals.}
+\item{t}{A matrix of ages. For exact ages, a one-column matrix (e.g., \code{matrix(age_values, ncol = 1)}). For age intervals, a two-column matrix where each row is a lower and upper bound.}
 
-\item{y}{A numeric vector of seropositive counts for each age or age group.}
+\item{y}{A numeric vector of the number of seropositive individuals in each age group or interval.}
 
-\item{n}{A numeric vector of total sample sizes for each age or age group.}
+\item{n}{A numeric vector of the number of individuals sampled in each group or interval.}
+
+\item{par_init}{Named vector of initial parameter values. Defaults to \code{c(gamma0 = 0.1, gamma1 = 1, gamma2 = 0.1)}.}
+
+\item{boot_num}{Number of bootstrap replicates for computing confidence intervals. Default is 1000.}
 }
 \value{
-A list with:
+A list containing:
 \describe{
-\item{\code{par}}{Maximum likelihood estimates of \code{gamma0}, \code{gamma1}, and \code{gamma2}.}
-\item{\code{CIs}}{Bootstrap-based 95\% confidence intervals for each parameter.}
-\item{\code{boot_params}}{Bootstrap samples for each parameter.}
+\item{\code{par}}{Maximum likelihood estimates of \code{gamma0}, \code{gamma1}, \code{gamma2}, and the FOI for each age group.}
+\item{\code{CIs}}{Bootstrap-based 95\% confidence intervals for each parameter and the FOI.}
+\item{\code{boot_params}}{A list of vectors containing the bootstrap samples for each parameter.}
 }
 }
 \description{
-Fits a flexible catalytic model in which the force of infection (FOI) is governed by three parameters: \eqn{\gamma_0}, \eqn{\gamma_1}, and \eqn{\gamma_2}.
-This model allows the FOI to vary non-linearly with age and includes saturation behavior.
+Implements a non-constant catalytic model where the force of infection (FOI) varies with age following a time-decaying pattern.
 }
 \details{
-The force of infection function is:
-\deqn{\lambda(t) = (\gamma_0 t + \gamma_1) \exp(-\gamma_2 t) + \gamma_1}
+The FOI is defined as:
+\deqn{\lambda(t) = (\gamma_0 t + \gamma_1)e^{-\gamma_2 t} + \gamma_1}
 
-The cumulative probability of infection by age \eqn{t} is:
-\deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(s) ds\right)}
+The cumulative probability of seroconversion up to age \eqn{t} is:
+\deqn{\pi(t) = 1 - \exp\left(-\int_0^t \lambda(s) ds \right)}
 
-This model is suitable when the FOI is expected to increase initially and then decline, reflecting waning exposure or susceptibility with age.
+For exact ages, the integral is calculated directly. For age intervals \eqn{\[a, b\]}, the average of \eqn{\pi(t)} across the interval is used
+as the binomial success probability.
 
-The model estimates the seroprevalence curve by integrating a non-linear FOI function over age. Confidence intervals are computed via nonparametric bootstrap resampling using the \code{create_boot_samps()} function.
+This model is useful when the FOI is expected to decay or level off with age after initially rising.
+The integration of \eqn{\lambda(t)} over age is done numerically unless a closed-form is available.
+Confidence intervals are obtained using nonparametric bootstrapping.
 
-If the input \code{t} is based on age intervals, ensure midpoints are used or modify the function to integrate over intervals.
+This function depends on an external utility \code{create_boot_samps()} that generates bootstrap samples in the form:
+\code{list(list(t = ..., y = ..., n = ...), ...)}.
+}
+\examples{
+# Exact age example
+t <- matrix(c(1, 3, 5, 7, 9), ncol = 1)
+y <- c(0, 2, 5, 8, 10)
+n <- rep(10, 5)
+result <- Farringtons(t, y, n, boot_num = 20) # kept low so that example can run quickly
+result$par
+result$CIs
+
+# Age interval example
+t_int <- matrix(c(0, 2, 2, 5, 5, 10, 10, 15, 15, 20), ncol = 2, byrow = TRUE)
+y_int <- c(0, 1, 4, 7, 9)
+n_int <- rep(10, 5)
+result_int <- Farringtons(t_int, y_int, n_int, boot_num = 20)
+result_int$par
+result_int$CIs
+
 }
