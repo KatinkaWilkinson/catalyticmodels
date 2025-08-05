@@ -58,12 +58,34 @@ create_boot_samps <- function(t, y, n, num_boot) {
   boot_y_matrix <- do.call(cbind, group_boots)
 
   # We want the output of the function to be a list where each element in the list is itself a list containing the t, y, n triplet for one bootstrap sample.
-  boot_list <- lapply(1:num_boot, function(i) {list(t = t, y = boot_y_matrix[i, ], n = n)})
+  boot_list <- lapply(1:num_boot, function(i) {list(y = boot_y_matrix[i, ])})
 
   future::plan(future::sequential) # close plan
 
   return(boot_list)
 }
+
+neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
+  if (is.null(dim(t)) || ncol(t) == 1) {
+    pi <- sapply(t, function(x) pi_t(x, par))
+  } else {
+    pi <- mapply(function(a, b) group_pi(a, b, par), t[,1], t[,2])
+  }
+
+  p_seropos_result <- rho * pi
+  p_seropos_result <- pmin(pmax(p_seropos_result, 1e-8), 1 - 1e-8)
+
+  ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
+
+  total_ll <- sum(ll)
+
+  if (!is.finite(total_ll)) {
+    return(1e6)  # Penalize: bad parameter set
+  }
+
+  return(-total_ll)
+}
+
 
 #
 # create_boot_samps_old_and_incorrect <- function(t, y, n, num_boot){

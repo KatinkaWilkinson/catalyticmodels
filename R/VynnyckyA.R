@@ -30,7 +30,7 @@
 #'
 #' @importFrom stats optim quantile integrate dbinom
 #' @export
-VynnyckyA <- function(t, y, n) {
+VynnyckyA <- function(t, y, n, par_init=c(rho=0.8,foi_y=0.5,foi_o=0.5), boot_num=1000) {
   loglik <- function(par, t, y, n) {
     rho <- par[1]
     foi_y <- par[2]
@@ -61,28 +61,31 @@ VynnyckyA <- function(t, y, n) {
   }
 
   # MLE
-  par_init <- c(rho=0.8,foi_y = 0.5, foi_o = 0.5)
   params <- optim(par=par_init, fn=loglik, t=t, y=y, n=n)$par
 
   # 95% bootstrap CIs
-  boot_num <- 1000
-  boot_rho <- numeric(length=boot_num)
-  boot_foi_y <- numeric(length=boot_num)
-  boot_foi_o <- numeric(length=boot_num)
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num)
-  for (b in 1:boot_num){
+
+  boot_results <- lapply(1:boot_num, function(b) {
     boot_samp <- bootstrap_samples[[b]]
-    bootsamp_t <- boot_samp$t
-    bootsamp_y <- boot_samp$y
-    bootsamp_n <- boot_samp$n
-    bootsamp_params <- tryCatch(
-      optim(par = par_init, fn = loglik, t = bootsamp_t, y = bootsamp_y, n = bootsamp_n)$par,
-      error = function(e) rep(NA, 3)
+
+    result <- tryCatch(
+      optim(par = par_init, fn = loglik, t = boot_samp$t, y = boot_samp$y, n = boot_samp$n),
+      error = function(e) NULL
     )
-    boot_rho[b] <- bootsamp_params[1]
-    boot_foi_y[b] <- bootsamp_params[2]
-    boot_foi_o[b] <- bootsamp_params[3]
-  }
+
+    if (is.null(result) || result$convergence != 0) {
+      return(rep(NA, 3))  # return NA if error occurred or convergence failed
+    } else {
+      return(result$par)  # return the estimated parameters
+    }
+  })
+
+  # lapply always outputs a list, while sapply (simplify apply, a wrapped function for lapply that simplifies the list output) simplifies the output into a vector/matrix
+  boot_rho <- sapply(boot_results, function(x) x[[1]]) # pull out all the first elements in each list contained in boot_results, and place all the
+  boot_foi_y <- sapply(boot_results, function(x) x[[2]])
+  boot_foi_o <- sapply(boot_results, function(x) x[[3]])
+
   rho_CI <- quantile(boot_rho, probs = c(0.025, 0.975), na.rm = TRUE)
   foi_y_CI <- quantile(boot_foi_y, probs = c(0.025, 0.975), na.rm = TRUE)
   foi_o_CI <- quantile(boot_foi_o, probs = c(0.025, 0.975), na.rm = TRUE)
