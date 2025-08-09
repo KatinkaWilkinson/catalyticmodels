@@ -1,3 +1,40 @@
+#' Create Instantaneous Force of Infection Function
+#'
+#' Returns a function \code{foi_t(t, par)} that computes the instantaneous force
+#' of infection at age \code{t}, based on the specified model type.
+#'
+#' Supported model types:
+#' \itemize{
+#'   \item \code{"MuenchGeneral"} – constant FOI from the third parameter.
+#'   \item \code{"MuenchRestricted"} – constant FOI from the first parameter.
+#'   \item \code{"Griffiths"} – FOI is zero until \eqn{\tau}, then increases linearly: \eqn{\gamma_0 (t + \gamma_1)}.
+#'   \item \code{"Farringtons"} – decaying exponential plus constant term.
+#'   \item \code{"PiecewiseConstant"} – constant within age intervals defined by \code{upper_cutoffs}.
+#'   \item \code{"Splines"} – computed from a smoothed prevalence spline, using:
+#'     \eqn{\lambda(t) = \pi'(t) / \left( 1 - \pi(t) \right)}.
+#' }
+#'
+#' @param type Character string specifying the model type.
+#' @param model_fixed_params Optional named list of fixed parameters required by certain models:
+#'   \itemize{
+#'     \item \code{"Griffiths"}: \code{list(tau = ...)}
+#'     \item \code{"PiecewiseConstant"}: \code{list(upper_cutoffs = ...)}
+#'   }
+#'
+#' @return A function \code{foi_t(t, par)} (or \code{foi_t(t, spline_pi_t)} for splines), where:
+#' \itemize{
+#'   \item \code{t} is age (numeric vector).
+#'   \item \code{par} is a numeric vector of model parameters.
+#'   \item The returned value is the instantaneous FOI at each age in \code{t}.
+#' }
+#' If \code{type} is unrecognised, returns \code{NA}.
+#'
+#' @details
+#' For spline-based models, FOI is calculated as the derivative of the prevalence spline divided by
+#' \eqn{1 - \pi(t)} (capped to avoid division by zero). This ensures the FOI is well-defined for all \code{t}.
+#' Base R functions like \code{ifelse}, \code{findInterval}, and \code{pmin} are used, so no special imports are required.
+#'
+#' @export
 set_foi_t <- function(type, model_fixed_params = NA) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (type == "MuenchGeneral") {

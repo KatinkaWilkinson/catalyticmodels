@@ -18,9 +18,7 @@ create_boot_samps(t, y, n, num_boot)
 \value{
 A list of length \code{num_boot}. Each element is itself a list containing:
 \describe{
-\item{\code{t}}{The original age structure passed to the function — either a vector or a matrix of intervals.}
 \item{\code{y}}{Bootstrapped seropositive counts corresponding to each age group or interval.}
-\item{\code{n}}{Total sample sizes for each age group or interval (unchanged across bootstraps).}
 }
 }
 \description{

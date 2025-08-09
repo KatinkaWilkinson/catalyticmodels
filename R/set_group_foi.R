@@ -1,3 +1,48 @@
+#' Create Group-Averaged Force of Infection Function
+#'
+#' Returns a function \code{group_foi(a, b, par)} (or \code{group_foi(a, b, spline_pi_t)} for splines)
+#' that computes the **average force of infection** over an age interval \eqn{[a, b)}, based on the
+#' specified model type.
+#'
+#' Supported model types:
+#' \itemize{
+#'   \item \code{"MuenchGeneral"} – constant FOI from the third parameter.
+#'   \item \code{"MuenchRestricted"} – constant FOI from the first parameter.
+#'   \item \code{"Griffiths"} – FOI is zero until \eqn{\tau}, then increases linearly:
+#'         \eqn{\gamma_0 (t + \gamma_1)}; integrates exactly over \eqn{[a,b)}.
+#'   \item \code{"Farringtons"} – exponential decay plus constant term; integrates exactly over \eqn{[a,b)}.
+#'   \item \code{"PiecewiseConstant"} – constant within age intervals defined by \code{upper_cutoffs};
+#'         computes a weighted average for overlaps with \eqn{[a,b)}.
+#'   \item \code{"Splines"} – computes average FOI by integrating
+#'         \eqn{\lambda(t) = \pi'(t)/(1 - \pi(t))} from a smoothed prevalence spline, then dividing by interval width.
+#' }
+#'
+#' @param type Character string specifying the model type.
+#' @param model_fixed_params Optional named list of fixed parameters required by certain models:
+#'   \itemize{
+#'     \item \code{"Griffiths"}: \code{list(tau = ...)}
+#'     \item \code{"PiecewiseConstant"}: \code{list(upper_cutoffs = ...)}
+#'   }
+#'
+#' @return A function \code{group_foi(a, b, par)} (or \code{group_foi(a, b, spline_pi_t)} for splines), where:
+#' \itemize{
+#'   \item \code{a} is the lower bound of the age interval.
+#'   \item \code{b} is the upper bound of the age interval.
+#'   \item \code{par} is a numeric vector of model parameters (for spline models, pass a spline object instead).
+#'   \item The returned value is the **average** FOI over \eqn{[a, b)}.
+#' }
+#'
+#' @details
+#' \strong{Piecewise models:} For \code{"PiecewiseConstant"}, overlaps between each defined interval and \eqn{[a,b)} are
+#' computed, and a weighted average is returned.
+#'
+#' \strong{Spline models:} The function uses numerical integration via \code{\link[stats]{integrate}} to approximate
+#' the mean FOI, with safeguards against division by zero.
+#'
+#' Base R functions like \code{ifelse}, \code{pmin}, \code{pmax}, \code{findInterval}, and \code{integrate} are used,
+#' so no package imports are required.
+#'
+#' @export
 set_group_foi <- function(type, model_fixed_params = NA) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (type == "MuenchGeneral") {

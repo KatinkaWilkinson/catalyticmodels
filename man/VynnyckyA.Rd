@@ -4,7 +4,13 @@
 \alias{VynnyckyA}
 \title{Vynnycky Catalytic Model A (Piecewise FOI with Assay Sensitivity)}
 \usage{
-VynnyckyA(t, y, n)
+VynnyckyA(
+  t,
+  y,
+  n,
+  par_init = c(rho = 0.8, foi_y = 0.5, foi_o = 0.5),
+  boot_num = 1000
+)
 }
 \arguments{
 \item{t}{A numeric vector of exact ages, or a matrix with two columns giving the lower and upper bounds of age intervals.}

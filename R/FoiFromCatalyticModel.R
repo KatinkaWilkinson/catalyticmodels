@@ -1,3 +1,75 @@
+#' Fit Catalytic Model and Estimate Force of Infection
+#'
+#' Fits a catalytic model to seroprevalence data to estimate parameters, force of infection (FOI),
+#' and associated bootstrap confidence intervals. Supports both exact-age and interval-age data,
+#' and allows different model types including spline-based models.
+#'
+#' @param t Numeric vector of ages or a two-column matrix of age intervals \[a, b\].
+#' @param y Numeric vector of the number of positive cases in each age group.
+#' @param n Numeric vector of total individuals tested in each age group.
+#' @param pi_t Function. Prevalence function of age and model parameters (ignored if \code{type} is provided).
+#' @param group_pi Function. Group prevalence function of age intervals and model parameters (ignored if \code{type} is provided).
+#' @param rho Numeric scalar. Test sensitivity/specificity adjustment parameter (default = 1).
+#' @param w Optional model-specific parameter.
+#' @param foi_t Function. FOI function of age and model parameters (ignored if \code{type} is provided).
+#' @param group_foi Function. Group FOI function of age intervals and model parameters (ignored if \code{type} is provided).
+#' @param type Character string specifying the model type. If not \code{NA}, appropriate functions and initial values are set automatically.
+#' @param model_fixed_params Optional list of fixed parameters for certain model types.
+#' @param boot_num Integer. Number of bootstrap samples to compute for confidence intervals (default = 1000).
+#' @param par_init Numeric vector of initial parameter values. If not supplied and \code{type} is provided, defaults are set automatically.
+#' @param lower Numeric vector or scalar of lower bounds for parameters (default = \code{-Inf}).
+#' @param upper Numeric vector or scalar of upper bounds for parameters (default = \code{Inf}).
+#' @param maxit Integer. Maximum number of iterations for optimisation (default = 100).
+#' @param factr Numeric. Optimisation tolerance for \code{L-BFGS-B} method (default = \code{1e7}).
+#' @param reltol Numeric. Relative convergence tolerance (default = \code{1e-8}).
+#'
+#' @details
+#' The function:
+#' \enumerate{
+#'   \item Sets appropriate model functions and initial parameters if \code{type} is specified.
+#'   \item Estimates model parameters via maximum likelihood using \code{\link[stats]{optim}}.
+#'   \item Computes bootstrap replicates to estimate confidence intervals for parameters and FOI.
+#'   \item Returns FOI estimates for exact ages or age intervals, with bootstrap confidence intervals.
+#' }
+#'
+#' Bootstrap resampling is performed from the observed data, and optimisation failures are reported.
+#'
+#' @return
+#' If \code{type != "Splines"}: A list containing:
+#' \itemize{
+#'   \item \code{params_MLE}: Named list of parameter maximum likelihood estimates.
+#'   \item \code{params_CI}: Named list of parameter 95\% confidence intervals.
+#'   \item \code{foi_MLE}: Named list of FOI estimates by age or age group.
+#'   \item \code{foi_CIs}: Named list of FOI 95\% confidence intervals by age or age group.
+#'   \item \code{bootparams}: Bootstrap parameter estimates (matrix).
+#'   \item \code{foi_t}: FOI function used.
+#' }
+#' If \code{type == "Splines"}: A list containing:
+#' \itemize{
+#'   \item \code{foi}: Named list of FOI estimates by age or age group.
+#'   \item \code{foi_CI}: Named list of FOI 95\% confidence intervals.
+#'   \item \code{foi_grid}: FOI estimates over a grid of ages.
+#'   \item \code{boot_y}: Bootstrap resampled response values.
+#'   \item \code{foi_t}: FOI function used.
+#'   \item \code{spline_pi_t}: Smoothed prevalence fit.
+#' }
+#'
+#' @export
+#'
+#' @importFrom stats optim quantile smooth.spline
+#'
+#' @examples
+#' # Example: fitting a hypothetical exact-age catalytic model
+#' # my_model <- FoiFromCatalyticModel(
+#' #   t = 1:50,
+#' #   y = round(runif(50, 0, 20)),
+#' #   n = rep(20, 50),
+#' #   type = "Constant",
+#' #   par_init = 0.05,
+#' #   lower = 0, upper = 1,
+#' #   boot_num = 100
+#' # )
+#' # str(my_model)
 FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, foi_t = NA, group_foi = NA, type = NA, model_fixed_params = NA, boot_num = 1000, par_init=NA, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8) {
   # Preset: Set pi_t, group_pi, foi_t, group_foi to the correct values, if type != NA
   if (!is.na(type)) {
@@ -37,7 +109,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
                           t = t, y = y, n = n,
                           rho = rho)$par
     }
-    names(params_MLE) <- names(par_init)  # Copy names from par_init
+    names(params_MLE) <- names(par_init)  # Copy names from par_init ########### !!!!!!!!! does it throw errors if there are no names??
     params_MLE_list <- as.list(params_MLE)
 
   }

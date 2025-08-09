@@ -13,4 +13,6 @@ BugReports: https://github.com/KatinkaWilkinson/catalyticmodels/issues
 Imports: 
     Iso,
     future,
-    future.apply
+    future.apply,
+    ggplot2,
+    stats
