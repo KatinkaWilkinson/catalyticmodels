@@ -76,7 +76,7 @@ set_pi_t <- function(type, model_fixed_params = NA) { # type is a string, model_
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
 
     pi_t <- function(t, par) {
-      foi_pieces <- par
+      foi_pieces <- par[ names(par) != "rho" ]
       interval_lengths <- pmax(pmin(t, upper_cutoffs) - lower_cutoffs, 0)
       cum_foi <- sum(foi_pieces * interval_lengths)
       return(1 - exp(-cum_foi))

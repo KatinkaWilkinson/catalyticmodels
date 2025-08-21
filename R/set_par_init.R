@@ -25,31 +25,36 @@
 #' \code{model_fixed_params\$upper_cutoffs}. Ensure this list element exists to avoid errors.
 #' The default values are chosen to be moderate and non-zero, aiding in stable optimisation.
 #' @export
-set_par_init <- function(type, model_fixed_params = NA) {
+set_par_init <- function(type, model_fixed_params = NA, rho) {
   if (type == "MuenchGeneral") {
-    return(c(k=0.5, l=1, foi=0.1))
+    pars <- c(k=0.5, l=1, foi=0.1)
   }
 
   else if (type == "MuenchRestricted") {
-    return(c(foi=0.1))
+    pars <- c(foi=0.1)
   }
 
   else if (type == "Griffiths") {
-    return(c(gamma0=0.1, gamma1=-5))
+    pars <- c(gamma0=0.1, gamma1=-5)
   }
 
   else if (type == "Farringtons") {
-    return(c(gamma0=0.1, gamma1=1, gamma2=0.1))
+    pars <- c(gamma0=0.1, gamma1=1, gamma2=0.1)
   }
 
   else if (type == "PiecewiseConstant") {
     num_pieces <- length(model_fixed_params$upper_cutoffs)
-    par_vals <- rep(0.1, num_pieces)
-    names(par_vals) <- paste0("foi", seq_len(num_pieces))
-    return(par_vals)
+    pars <- rep(0.1, num_pieces)
+    names(pars) <- paste0("foi", seq_len(num_pieces))
   }
 
   else {
     return(NA)
   }
+
+  if (is.na(rho)) {
+    pars <- c(pars, rho=0.8) # a reasonable assay sensitivity, based on the results that popped up when I googled what common assay sensitivities were
+  }
+
+  return(pars)
 }

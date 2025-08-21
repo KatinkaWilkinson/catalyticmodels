@@ -64,145 +64,66 @@ create_boot_samps <- function(t, y, n, num_boot) {
 }
 
 neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
+  # Compute pi depending on whether t is intervals or points
   if (is.null(dim(t)) || ncol(t) == 1) {
     pi <- sapply(t, function(x) pi_t(x, par))
   } else {
     pi <- mapply(function(a, b) group_pi(a, b, par), t[,1], t[,2])
   }
 
-  p_seropos_result <- rho * pi
-  p_seropos_result <- pmin(pmax(p_seropos_result, 1e-8), 1 - 1e-8)
-
-  ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
-
-  total_ll <- sum(ll)
-
-  if (!is.finite(total_ll)) {
-    return(1e6)  # Penalize: bad parameter set
+  # Determine rho estimate
+  if (is.na(rho)) {
+    if ("rho" %in% names(par)) {
+      rho_estimate <- par["rho"]
+    } else {
+      rho_estimate <- par[length(par)]  # assume last element if no name "rho"
+    }
+  } else {
+    rho_estimate <- rho
   }
 
-  return(-total_ll)
-}
+  # Calculate seropositivity probability with rho adjustment
+  p_seropos_result <- rho_estimate * pi
 
-## NEW VERSION
+  # Bound probabilities away from 0 and 1 for numerical stability
+  p_seropos_result <- pmin(pmax(p_seropos_result, 1e-8), 1 - 1e-8)
 
-neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
-  # Evaluate pi
-  pi <- tryCatch({
-    if (is.null(dim(t)) || ncol(t) == 1) {
-      sapply(t, function(x) pi_t(x, par))
-    } else {
-      mapply(function(a, b) group_pi(a, b, par), t[,1], t[,2])
-    }
-  }, error = function(e) rep(NA, length(y)))
-
-  # If pi is bad, return penalty
-  if (any(!is.finite(pi)) || any(pi < 0) || any(pi > 1)) return(1e6)
-
-  p_seropos_result <- pmin(pmax(rho * pi, 1e-8), 1 - 1e-8)
-
+  # Log-likelihood of observed seropositive counts under binomial
   ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
 
   total_ll <- sum(ll)
 
-  if (!is.finite(total_ll)) return(1e6)
+  # Penalize non-finite likelihoods to avoid optimization errors
+  if (!is.finite(total_ll)) {
+    return(1e6)
+  }
 
+  # Return negative log-likelihood for minimization
   return(-total_ll)
 }
 
+## NEW VERSION BELOW!!! Maybe uncomment!!!
 
-
-#
-# create_boot_samps_old_and_incorrect <- function(t, y, n, num_boot){
-#   set.seed(123)
-#   raw_dat <- synthesise_raw_data(t, y, n)
-#   boot_results <- list()
-#
-#   for (b in 1:num_boot) {
-#     ind <- sample(1:nrow(raw_dat), nrow(raw_dat), replace = TRUE)
-#     boot_raw_dat <- raw_dat[ind, ]
-#
-#     if (is.matrix(t)) {
-#       # Recreate the same intervals
-#       age_intervals <- t
-#       boot_y <- numeric(nrow(age_intervals))
-#       boot_n <- numeric(nrow(age_intervals))
-#       for (i in 1:nrow(age_intervals)) {
-#         lower <- age_intervals[i, 1]
-#         upper <- age_intervals[i, 2]
-#         in_interval <- boot_raw_dat$t >= lower & boot_raw_dat$t < upper
-#         boot_y[i] <- sum(boot_raw_dat[in_interval,2])
-#         boot_n[i] <- sum(in_interval)
-#       }
-#       boot_results[[b]] <- list(t = age_intervals, y = boot_y, n = boot_n)
-#
+# neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
+#   # Evaluate pi
+#   pi <- tryCatch({
+#     if (is.null(dim(t)) || ncol(t) == 1) {
+#       sapply(t, function(x) pi_t(x, par))
 #     } else {
-#       # For exact ages
-#       boot_t <- t
-#       boot_y <- sapply(boot_t, function(tt) sum(boot_raw_dat[boot_raw_dat[,1] == tt, 2]))
-#       boot_n <- sapply(boot_t, function(tt) sum(boot_raw_dat[,1] == tt))
-#       boot_results[[b]] <- list(t = boot_t, y = boot_y, n = boot_n)
+#       mapply(function(a, b) group_pi(a, b, par), t[,1], t[,2])
 #     }
-#   }
+#   }, error = function(e) rep(NA, length(y)))
 #
-#   return(boot_results)
-# }
-
-# synthesise_raw_data <- function(t, y, n) {
-#   total_people <- sum(n)
-#   raw_mat <- matrix(0, nrow = total_people, ncol = 2)  # columns: age, seroresult
+#   # If pi is bad, return penalty
+#   if (any(!is.finite(pi)) || any(pi < 0) || any(pi > 1)) return(1e6)
 #
-#   if (is.matrix(t) && ncol(t) == 2) {
-#     # Interval data
-#     current_index <- 1
-#     for (i in 1:nrow(t)) {
-#       num_people <- n[i]
-#       num_positive <- y[i]
-#       num_negative <- num_people - num_positive
+#   p_seropos_result <- pmin(pmax(rho * pi, 1e-8), 1 - 1e-8)
 #
-#       ages <- runif(num_people, min = t[i, 1], max = t[i, 2])
-#       sero_results <- sample(c(rep(1, num_positive), rep(0, num_negative)))
+#   ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
 #
-#       rows <- current_index:(current_index + num_people - 1)
-#       raw_mat[rows, 1] <- ages
-#       raw_mat[rows, 2] <- sero_results
+#   total_ll <- sum(ll)
 #
-#       current_index <- current_index + num_people
-#     }
+#   if (!is.finite(total_ll)) return(1e6)
 #
-#   } else {
-#     # Exact ages
-#     raw_t <- rep(t, n)
-#     sero_results <- numeric(length(raw_t))  # preallocate
-#
-#     index <- 1
-#     for (i in seq_along(t)) {
-#       num_people <- n[i]
-#       num_positive <- y[i]
-#       num_negative <- num_people - num_positive
-#
-#       sero_vals <- sample(c(rep(1, num_positive), rep(0, num_negative)))
-#
-#       sero_results[index:(index + num_people - 1)] <- sero_vals
-#       index <- index + num_people
-#     }
-#
-#     raw_mat[, 1] <- raw_t
-#     raw_mat[, 2] <- sero_results
-#   }
-#
-#   # Final checks before returning
-#   raw_data <- data.frame(t = raw_mat[, 1], seroresult = raw_mat[, 2])
-#
-#   # Debug print
-#   print(table(raw_data$t))
-#   print(table(raw_data$seroresult))
-#   return(raw_data)
-# }
-
-# synthesise_count_data <- function(t, seroresult) {
-#   agegroups <- sort(unique(t))
-#   y <- sapply(agegroups, function(tt) sum(seroresult[t==tt]))
-#   n <- sapply(agegroups, function(tt) sum(t==tt))
-#   return(list(t=agegroups, y=y, n=n))
+#   return(-total_ll)
 # }

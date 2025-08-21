@@ -53,7 +53,7 @@ set_group_pi <- function(type, model_fixed_params) { # type is a string, model_f
       l <- par[2]
       foi <- par[3]
       if (foi < 1e-6) foi <- 1e-6
-      return(k * (l + exp(-foi*b) - exp(-foi*a))/(foi*(b-a)))
+      return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
     }
   }
 
@@ -62,7 +62,8 @@ set_group_pi <- function(type, model_fixed_params) { # type is a string, model_f
     l <- model_fixed_params$l
     group_pi <- function(a, b, par) {
       foi <- par[1]
-      return(k * (l + exp(-foi*b) - exp(-foi*a))/(foi*(b-a)))
+      return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
+      # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
     }
   }
 
@@ -124,7 +125,8 @@ set_group_pi <- function(type, model_fixed_params) { # type is a string, model_f
     upper_cutoffs <- model_fixed_params$upper_cutoffs
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
     group_pi <- function(a, b, par) {
-      foi_pieces <- par
+      foi_pieces <- par[ names(par) != "rho" ]
+      # warning("Current foi_pieces: ", paste(round(foi_pieces, 4), collapse = ", "))
       interval_lengths_a <- pmax(pmin(a, upper_cutoffs) - lower_cutoffs, 0)
       cum_foi_a <- sum(foi_pieces * interval_lengths_a)
       pi_a <- 1-exp(-cum_foi_a)

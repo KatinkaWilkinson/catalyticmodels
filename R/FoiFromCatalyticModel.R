@@ -70,7 +70,7 @@
 #' #   boot_num = 100
 #' # )
 #' # str(my_model)
-FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, foi_t = NA, group_foi = NA, type = NA, model_fixed_params = NA, boot_num = 1000, par_init=NA, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8) {
+FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, foi_t = NA, group_foi = NA, type = NA, model_fixed_params = NA, boot_num = 1000, par_init=NA, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, convergence_attempts=20) {
   # Preset: Set pi_t, group_pi, foi_t, group_foi to the correct values, if type != NA
   if (!is.na(type)) {
     if (type != "Splines") {
@@ -79,37 +79,59 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     }
     foi_t <- set_foi_t(type, model_fixed_params)
     group_foi <- set_group_foi(type, model_fixed_params)
-    if (is.na(par_init) && type != "Splines") {
-      par_init <- set_par_init(type, model_fixed_params)
+    if (any(is.na(par_init)) && type != "Splines") {
+      par_init <- set_par_init(type, model_fixed_params, rho)
     }
+  }
+  param_names <- names(par_init)
+  if (is.null(param_names)) {
+    param_names <- paste0("param", seq_along(par_init))
   }
 
   # Step 1: Find parameter MLEs
   if (type != "Splines") {
-    if (length(par_init) == 1) {
-      params_MLE <- optim(par = par_init,
-                          fn = neg_total_binom_loglik,
-                          method = "Brent",
-                          control = list(maxit = maxit),
-                          lower = lower,
-                          upper = upper,
-                          pi_t=pi_t,
-                          group_pi=group_pi,
-                          t=t, y=y, n=n,
-                          rho=rho)$par
-    } else {
-      params_MLE <- optim(par = par_init,
-                          fn = neg_total_binom_loglik,
-                          method = "L-BFGS-B", # try gauss seidel #######!!!!!!!!!!!!!!!!!!!!!!!!
-                          control = list(maxit = maxit, factr = factr, reltol=reltol),
-                          lower = lower,
-                          upper = upper,
-                          pi_t = pi_t,
-                          group_pi = group_pi,
-                          t = t, y = y, n = n,
-                          rho = rho)$par
+    convergence_attempt <- 1
+    result <- list(convergence = -1)
+    par_init_modified <- par_init
+    while (result$convergence != 0 && convergence_attempt < convergence_attempts) {
+      if (convergence_attempt != 1) {
+        rnd <- runif(length(par_init), -0.5, 0.5) * abs(par_init)
+        par_init_modified <- par_init + rnd
+        par_init_modified <- pmax(pmin(par_init_modified, upper), lower)
+        # to make sure that initial vals are still within limits
+      }
+      if (length(par_init) == 1) {
+        result <- optim(par = par_init_modified,
+                        fn = neg_total_binom_loglik,
+                        method = "Brent",
+                        control = list(maxit = maxit),
+                        lower = lower,
+                        upper = upper,
+                        pi_t=pi_t,
+                        group_pi=group_pi,
+                        t=t, y=y, n=n,
+                        rho=rho)
+      } else {
+        result <- optim(par = par_init_modified,
+                        fn = neg_total_binom_loglik,
+                        method = "L-BFGS-B", # try gauss seidel #######!!!!!!!!!!!!!!!!!!!!!!!!
+                        control = list(maxit = maxit, factr = factr),
+                        lower = lower,
+                        upper = upper,
+                        pi_t = pi_t,
+                        group_pi = group_pi,
+                        t = t, y = y, n = n,
+                        rho = rho)
+      }
+      convergence_attempt <- convergence_attempt + 1
     }
-    names(params_MLE) <- names(par_init)  # Copy names from par_init ########### !!!!!!!!! does it throw errors if there are no names??
+
+    if (result$convergence != 0) {
+      warning("Convergence failed after ", convergence_attempts, " attempts.")
+      return(NULL)
+    }
+    params_MLE <- result$par
+    names(params_MLE) <- param_names  # Copy names from par_init ########### !!!!!!!!! does it throw errors if there are no names??
     params_MLE_list <- as.list(params_MLE)
 
   }
@@ -126,34 +148,47 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     while (converged_count < boot_num && i <= max_attempts) {
       boot_samp <- bootstrap_samples[[i]]
 
-      result <- tryCatch({
-        if (length(par_init) == 1) {
-          optim(par = par_init,
-                fn = neg_total_binom_loglik,
-                method = "Brent",
-                control = list(maxit = maxit),
-                lower = lower,
-                upper = upper,
-                pi_t = pi_t,
-                group_pi = group_pi,
-                t = t, y = boot_samp$y, n = n,
-                rho = rho)
-        } else {
-          optim(par = par_init,
-                fn = neg_total_binom_loglik,
-                method = "L-BFGS-B",
-                control = list(maxit = maxit, factr = factr, reltol=reltol, trace=1),
-                lower = lower,
-                upper = upper,
-                pi_t = pi_t,
-                group_pi = group_pi,
-                t = t, y = boot_samp$y, n = n,
-                rho = rho)
+      convergence_attempt <- 1
+      result <- list(convergence = -1)
+      par_init_modified <- par_init
+      while (result$convergence != 0 && convergence_attempt < convergence_attempts) {
+        if (convergence_attempt != 1) {
+          rnd <- runif(length(par_init), -0.5, 0.5) * abs(par_init)
+          par_init_modified <- par_init + rnd
+          par_init_modified <- pmax(pmin(par_init_modified, upper), lower)
+          # to make sure that initial vals are still within limits
         }
-      }, error = function(e) {
-        message("Caught error in optim: ", e$message)
-        return(NULL)
-      })
+        result <- tryCatch({
+          if (length(par_init) == 1) {
+            optim(par = par_init_modified,
+                  fn = neg_total_binom_loglik,
+                  method = "Brent",
+                  control = list(maxit = maxit, trace=1),
+                  lower = lower,
+                  upper = upper,
+                  pi_t = pi_t,
+                  group_pi = group_pi,
+                  t = t, y = boot_samp$y, n = n,
+                  rho = rho)
+          } else {
+            optim(par = par_init_modified,
+                  fn = neg_total_binom_loglik,
+                  method = "L-BFGS-B",
+                  control = list(maxit = maxit, factr = factr, trace=1),
+                  lower = lower,
+                  upper = upper,
+                  pi_t = pi_t,
+                  group_pi = group_pi,
+                  t = t, y = boot_samp$y, n = n,
+                  rho = rho)
+          }
+        }, error = function(e) {
+          message("Caught error in optim: ", e$message)
+          return(NULL)
+        })
+
+        convergence_attempt <- convergence_attempt + 1
+      }
 
       total_attempts <- total_attempts + 1
       if (!is.null(result) && result$convergence == 0) {
@@ -182,13 +217,17 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     cat("Total attempts: ", total_attempts, "\n")
     cat("Failed fits: ", total_attempts - converged_count, "\n")
 
+    if (length(boot_results) == 0) {
+      warning("No bootstrap fits converged; cannot compute confidence intervals.")
+      return(NULL)
+    }
     boot_matrix <- do.call(rbind, boot_results)
 
     params_CI <- lapply(1:ncol(boot_matrix), function(i) {
       quantile(boot_matrix[, i], probs = c(0.025, 0.975), na.rm = TRUE)
     })
 
-    names(params_CI) <- names(par_init)
+    names(params_CI) <- param_names
 
   }
 
@@ -269,5 +308,4 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   return(list(params_MLE = params_MLE_list, params_CI=params_CI, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t)) # output foi_t so that it can be used by plot!
 }
-
 
