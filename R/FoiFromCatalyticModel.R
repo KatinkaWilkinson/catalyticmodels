@@ -89,7 +89,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
   }
 
   # Step 1: Find parameter MLEs
-  if (type != "Splines") {
+  if (is.na(type) || type != "Splines") {
     convergence_attempt <- 1
     result <- list(convergence = -1)
     par_init_modified <- par_init
@@ -114,7 +114,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
       } else {
         result <- optim(par = par_init_modified,
                         fn = neg_total_binom_loglik,
-                        method = "L-BFGS-B", # try gauss seidel #######!!!!!!!!!!!!!!!!!!!!!!!!
+                        method = "L-BFGS-B",
                         control = list(maxit = maxit, factr = factr),
                         lower = lower,
                         upper = upper,
@@ -138,7 +138,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   bootstrap_samples <- create_boot_samps(t, y, n, boot_num * 2)
 
-  if (type != "Splines") {
+  if (is.na(type) || type != "Splines") {
     boot_results <- list()
     converged_count <- 0
     total_attempts <- 0
@@ -233,7 +233,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   # Step 3: Find FOI MLE for each age group in t
   if (is.null(dim(t)) || ncol(t) == 1) {
-    if (type == "Splines") {
+    if (!is.na(type) && type == "Splines") {
       spline_pi_t <- smooth.spline(t, y/n)
       foi <- foi_t(t=t, spline_pi_t=spline_pi_t)
 
@@ -243,7 +243,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
       foi_MLE <- mapply(foi_t, t, MoreArgs = list(par = params_MLE))
     }
   } else {
-    if (type == "Splines") {
+    if (!is.na(type) && type == "Splines") {
       t_mid <- (t[,1] + t[,2]) / 2
       spline_pi_t <- smooth.spline(t_mid, y/n)
       foi <- mapply(group_foi, a = t[, 1], b = t[, 2])
@@ -262,7 +262,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     # if t is a vector or 1 col matrix, for each value in t, apply foi_t to every row in boot_matrix
     # if t is a 2 col matrix, for each row in t, pull out a and b and apply group_foi to every row in boot_matrix
     # then use quantile to get the 95% CI for the foi of each t category
-  if (type == "Splines") {
+  if (!is.na(type) && type == "Splines") {
     foi_mat <- sapply(bootstrap_samples, function(sample) {
       spline_pi_t <- smooth.spline(t, sample$y / n)
       foi_t(t = t, spline_pi_t = spline_pi_t)
@@ -289,7 +289,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     paste0("[", t[,1], ",", t[,2], ")")  # interval labels
   }
 
-  if (type == "Splines") {
+  if (!is.na(type) && type == "Splines") {
     foi_list <- as.list(foi)
     names(foi_list) <- t_labels
   } else {
@@ -302,7 +302,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   #print(boot_matrix)
 
-  if (type == "Splines") {
+  if (!is.na(type) && type == "Splines") {
     return(list(foi=foi_list, foi_CI=foi_CI_list, foi_grid=foi_grid, boot_y, foi_t, spline_pi_t))
   }
 
