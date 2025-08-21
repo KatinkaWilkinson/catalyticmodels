@@ -38,13 +38,14 @@ plot_foi_grid <- function(cat_models, from, to, confint = FALSE) {
     foi_grid <- model$foi_t(t_grid, unlist(model$params_MLE))
 
     if (confint) {
-      lower_par <- sapply(model$params_CI, function(ci) ci[1])
-      upper_par <- sapply(model$params_CI, function(ci) ci[2])
-      foi_CI <- cbind(
-        lower = model$foi_t(t_grid, lower_par),
-        upper = model$foi_t(t_grid, upper_par)
-      )
-
+      foi_CI <- matrix(ncol = 2, nrow = length(t_grid))
+      for (i in 1:length(t_grid)) {
+        t <- t_grid[i]
+        boot_fois <- apply(model$bootparams, 1, function(x) {model$foi_t(t, x)})
+        foi_CI[i,] <- t(quantile(boot_fois, probs = c(0.025, 0.975)))
+      }
+      colnames(foi_CI) <- c("lower", "upper")
+      print(foi_CI)
       data.frame(
         age = t_grid,
         foi = foi_grid,

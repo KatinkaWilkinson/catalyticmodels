@@ -35,7 +35,7 @@ set_par_init <- function(type, model_fixed_params = NA, rho) {
   }
 
   else if (type == "Griffiths") {
-    pars <- c(gamma0=0.1, gamma1=-5)
+    pars <- c(gamma0=1, gamma1=-1)
   }
 
   else if (type == "Farringtons") {
