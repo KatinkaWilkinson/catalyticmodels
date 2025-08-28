@@ -45,101 +45,128 @@
 #'
 #' @importFrom stats pnorm integrate
 #' @export
-set_group_pi <- function(type, model_fixed_params) { # type is a string, model_fixed_params is a list
+set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t = NULL) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
-  if (type == "MuenchGeneral") {
-    group_pi <- function(a, b, par) {
-      k <- par[1]
-      l <- par[2]
-      foi <- par[3]
-      if (foi < 1e-6) foi <- 1e-6
-      return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
-    }
-  }
-
-  else if (type == "MuenchRestricted") {
-    k <- model_fixed_params$k
-    l <- model_fixed_params$l
-    group_pi <- function(a, b, par) {
-      foi <- par[1]
-      return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
-      # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
-    }
-  }
-
-  else if (type == "Griffiths") {
-    tau <- model_fixed_params$tau
-    group_pi <- function(a, b, par) {
-      gamma0 <- par[1]
-      gamma1 <- par[2]
-
-      if (b <= tau) return(0)
-
-      # Adjust bounds if partially below tau
-      a_adj <- max(a, tau)
-      b_adj <- b
-
-      sqrt_pi <- sqrt(pi)
-      sqrt2 <- sqrt(2)
-      sqrt_gamma0 <- sqrt(gamma0)
-
-      erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
-
-      exp_term <- exp((gamma0 * a_adj^2) / 2 + gamma0 * gamma1 * a_adj + (gamma0 * gamma1^2) / 2)
-
-      erf1 <- erf(sqrt_gamma0 * (sqrt2 * a_adj + sqrt2 * gamma1) / 2)
-      erf2 <- erf(sqrt_gamma0 * (sqrt2 * b_adj + sqrt2 * gamma1) / 2)
-
-      A_term <- sqrt_pi * sqrt_gamma0 * sqrt2 * exp_term * (erf1 - erf2)
-      B_term <- 2 * gamma0 * (b_adj - a_adj)
-
-      integral <- (A_term + B_term) / (2 * gamma0)
-
-      avg_pi <- integral / (b - a)
-
-      return(avg_pi)
-    }
-  }
-
-  else if (type == "Farringtons") {
-    group_pi <- function(a, b, par) {
-      gamma0 <- par[1]
-      gamma1 <- par[2]
-      gamma2 <- par[3]
-      if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
-      pi_func <- function(t) {
-        return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
+  if (!is.na(foi_functional_form) && !is.na(catalytic_model_type)) {
+    if (catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
+      group_pi <- function(a, b, par) {
+        k <- par[["k"]]
+        l <- par[["l"]]
+        foi <- par[["foi"]]
+        if (foi < 1e-6) foi <- 1e-6
+        return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
       }
-      tryCatch(
-        integrate(pi_func, a, b)$value / (b - a),
-        error = function(e) {
-          message(paste("Integration failed on interval [", a, ",", b, "] for gamma0 =",
-                        gamma0, ", gamma1 =", gamma1, ", gamma2 =", gamma2, ":", e$message))
-          return(NA)
+    }
+
+    else if (catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
+      k <- model_fixed_params$k
+      l <- model_fixed_params$l
+      group_pi <- function(a, b, par) {
+        foi <- par[["foi"]]
+        return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
+        # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
+      }
+    }
+
+    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
+      tau <- model_fixed_params$tau
+      group_pi <- function(a, b, par) {
+        gamma0 <- par[["gamma0"]]
+        gamma1 <- par[["gamma1"]]
+
+        if (b <= tau) return(0)
+
+        # Adjust bounds if partially below tau
+        a_adj <- max(a, tau)
+        b_adj <- b
+
+        sqrt_pi <- sqrt(pi)
+        sqrt2 <- sqrt(2)
+        sqrt_gamma0 <- sqrt(gamma0)
+
+        erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+
+        exp_term <- exp((gamma0 * a_adj^2) / 2 + gamma0 * gamma1 * a_adj + (gamma0 * gamma1^2) / 2)
+
+        erf1 <- erf(sqrt_gamma0 * (sqrt2 * a_adj + sqrt2 * gamma1) / 2)
+        erf2 <- erf(sqrt_gamma0 * (sqrt2 * b_adj + sqrt2 * gamma1) / 2)
+
+        A_term <- sqrt_pi * sqrt_gamma0 * sqrt2 * exp_term * (erf1 - erf2)
+        B_term <- 2 * gamma0 * (b_adj - a_adj)
+
+        integral <- (A_term + B_term) / (2 * gamma0)
+
+        avg_pi <- integral / (b - a)
+
+        return(avg_pi)
+      }
+    }
+
+    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") {
+      group_pi <- function(a, b, par) {
+        gamma0 <- par[["gamma0"]]
+        gamma1 <- par[["gamma1"]]
+        gamma2 <- par[["gamma2"]]
+        if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
+        pi_func <- function(t) {
+          return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
         }
-      )
+        tryCatch(
+          integrate(pi_func, a, b)$value / (b - a),
+          error = function(e) {
+            message(paste("Integration failed on interval [", a, ",", b, "] for gamma0 =",
+                          gamma0, ", gamma1 =", gamma1, ", gamma2 =", gamma2, ":", e$message))
+            return(NA)
+          }
+        )
+      }
     }
+
+    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
+      # upper_cutoffs <- model_fixed_params$upper_cutoffs
+      # lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+      upper_cutoffs <- model_fixed_params$upper_cutoffs
+      lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+      group_pi <- function(a, b, par) {
+        # foi_pieces <- par[ names(par) != "rho" ]
+        # # warning("Current foi_pieces: ", paste(round(foi_pieces, 4), collapse = ", "))
+        # interval_lengths_a <- pmax(pmin(a, upper_cutoffs) - lower_cutoffs, 0)
+        # cum_foi_a <- sum(foi_pieces * interval_lengths_a)
+        # pi_a <- 1-exp(-cum_foi_a)
+        #
+        # interval_lengths_b <- pmax(pmin(b, upper_cutoffs) - lower_cutoffs, 0)
+        # cum_foi_b <- sum(foi_pieces * interval_lengths_b)
+        # pi_b <- 1-exp(-cum_foi_b)
+        #
+
+        integrand <- function(t, par) {
+          foi_pieces <- unname(par[names(par) != "rho"])
+          sapply(t, function(tt) {
+            interval_lengths <- pmax(pmin(tt, upper_cutoffs) - lower_cutoffs, 0)
+            cum_foi <- sum(foi_pieces * interval_lengths)
+            1 - exp(-cum_foi)
+          })
+        }
+
+        auc <- integrate(function(t) integrand(t, par), lower = a, upper = b)$value
+
+        return(auc/(b-a))
+      }
+    }
+    return(group_pi)
   }
 
-  else if (type == "PiecewiseConstant") {
-    upper_cutoffs <- model_fixed_params$upper_cutoffs
-    lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+
+  # else if (catalytic_model_type == "SimpleCatalytic" || catalytic_model_type == "OriginalCatalytic"|| catalytic_model_type == "RestrictedCatalytic"|| catalytic_model_type == "WaningImmunity" || catalytic_model_type == "Vaccine") {
+  #   group_pi <- function(a, b, par) {
+  #     1/(b-a) * integrate(function(x) {pi_t(x, par)}, a, b)$value
+  #   }
+  # }
+
+  else { # this okay? Any situation where it is not? :))))
     group_pi <- function(a, b, par) {
-      foi_pieces <- par[ names(par) != "rho" ]
-      # warning("Current foi_pieces: ", paste(round(foi_pieces, 4), collapse = ", "))
-      interval_lengths_a <- pmax(pmin(a, upper_cutoffs) - lower_cutoffs, 0)
-      cum_foi_a <- sum(foi_pieces * interval_lengths_a)
-      pi_a <- 1-exp(-cum_foi_a)
-      interval_lengths_b <- pmax(pmin(b, upper_cutoffs) - lower_cutoffs, 0)
-      cum_foi_b <- sum(foi_pieces * interval_lengths_b)
-      pi_b <- 1-exp(-cum_foi_b)
-      return((pi_b-pi_a)/(b-a))
+      1/(b-a) * integrate(function(x) {pi_t(x, par)}, a, b)$value
     }
-  }
-
-
-  else {
-    return(NA)
   }
 
   return(group_pi)

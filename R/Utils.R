@@ -63,7 +63,9 @@ create_boot_samps <- function(t, y, n, num_boot) {
   return(boot_list)
 }
 
-neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
+neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho, param_names) {
+  if (is.null(names(par))) {names(par) <- param_names} # putting this in because optim drops the names!
+
   # Compute pi depending on whether t is intervals or points
   if (is.null(dim(t)) || ncol(t) == 1) {
     pi <- sapply(t, function(x) pi_t(x, par))
@@ -73,11 +75,7 @@ neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
 
   # Determine rho estimate
   if (is.na(rho)) {
-    if ("rho" %in% names(par)) {
-      rho_estimate <- par["rho"]
-    } else {
-      rho_estimate <- par[length(par)]  # assume last element if no name "rho"
-    }
+    rho_estimate <- par["rho"]
   } else {
     rho_estimate <- rho
   }

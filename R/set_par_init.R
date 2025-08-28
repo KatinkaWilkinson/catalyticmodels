@@ -25,31 +25,31 @@
 #' \code{model_fixed_params\$upper_cutoffs}. Ensure this list element exists to avoid errors.
 #' The default values are chosen to be moderate and non-zero, aiding in stable optimisation.
 #' @export
-set_par_init <- function(type, model_fixed_params = NA, rho) {
-  if (type == "MuenchGeneral") {
-    pars <- c(k=0.5, l=1, foi=0.1)
+set_par_init <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, rho, pars = NA) {
+  if (!is.na(foi_functional_form)) {
+    if (foi_functional_form == "Constant") {
+      pars <- c(foi=0.1)
+    }
+
+    else if (foi_functional_form == "Griffiths") {
+      pars <- c(gamma0=1, gamma1=-1)
+    }
+
+    else if (foi_functional_form == "Farringtons") {
+      pars <- c(gamma0=0.1, gamma1=1, gamma2=0.1)
+    }
+
+    else if (foi_functional_form == "PiecewiseConstant") {
+      num_pieces <- length(model_fixed_params$upper_cutoffs)
+      pars <- rep(0.1, num_pieces)
+      names(pars) <- paste0("foi", seq_len(num_pieces))
+    }
   }
 
-  else if (type == "MuenchRestricted") {
-    pars <- c(foi=0.1)
-  }
-
-  else if (type == "Griffiths") {
-    pars <- c(gamma0=1, gamma1=-1)
-  }
-
-  else if (type == "Farringtons") {
-    pars <- c(gamma0=0.1, gamma1=1, gamma2=0.1)
-  }
-
-  else if (type == "PiecewiseConstant") {
-    num_pieces <- length(model_fixed_params$upper_cutoffs)
-    pars <- rep(0.1, num_pieces)
-    names(pars) <- paste0("foi", seq_len(num_pieces))
-  }
-
-  else {
-    return(NA)
+  if (!is.na(catalytic_model_type)) {
+    if (catalytic_model_type == "OriginalCatalytic") {
+      pars <- c(pars, k=0.5, l=0.5)
+    }
   }
 
   if (is.na(rho)) {

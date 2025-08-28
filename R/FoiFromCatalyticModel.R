@@ -70,26 +70,42 @@
 #' #   boot_num = 100
 #' # )
 #' # str(my_model)
-FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, foi_t = NA, group_foi = NA, type = NA, model_fixed_params = NA, boot_num = 1000, par_init=NA, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, convergence_attempts=20) {
+FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init=NA, rho=1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, boot_num = 1000, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, trace = 0, convergence_attempts=20) {
   # Preset: Set pi_t, group_pi, foi_t, group_foi to the correct values, if type != NA
-  if (!is.na(type)) {
-    if (type != "Splines") {
-      pi_t <- set_pi_t(type, model_fixed_params)
-      group_pi <- set_group_pi(type, model_fixed_params)
-    }
-    foi_t <- set_foi_t(type, model_fixed_params)
-    group_foi <- set_group_foi(type, model_fixed_params)
-    if (any(is.na(par_init)) && type != "Splines") {
-      par_init <- set_par_init(type, model_fixed_params, rho)
+  if (!is.na(catalytic_model_type)) {
+    if (is.na(foi_functional_form) || !is.na(foi_functional_form) && foi_functional_form != "Splines") {
+      pi_t <- set_pi_t(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t=foi_t)
+      group_pi <- set_group_pi(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t)
     }
   }
+  if (!is.na(foi_functional_form)) {
+    foi_t <- set_foi_t(catalytic_model_type, foi_functional_form, model_fixed_params)
+    group_foi <- set_group_foi(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t)
+  }
+
+  if (any(is.na(par_init)) || is.na(rho)) { # come back to this...... might be sketchy
+    par_init <- set_par_init(catalytic_model_type, foi_functional_form, model_fixed_params, rho, par_init)
+    if (is.na(rho)) {
+      lower <- c(lower, 0.01)
+      upper <- c(upper, 1)
+    }
+  }
+
+  if (is.null(group_pi)) {
+    group_pi <- set_group_pi(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t)
+  }
+
+  if (is.null(group_foi)) {
+    group_foi <- set_group_foi(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t)
+  }
+
   param_names <- names(par_init)
   if (is.null(param_names)) {
     param_names <- paste0("param", seq_along(par_init))
   }
 
   # Step 1: Find parameter MLEs
-  if (is.na(type) || type != "Splines") {
+  if (is.na(foi_functional_form) || foi_functional_form != "Splines") {
     convergence_attempt <- 1
     result <- list(convergence = -1)
     par_init_modified <- par_init
@@ -110,7 +126,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
                         pi_t=pi_t,
                         group_pi=group_pi,
                         t=t, y=y, n=n,
-                        rho=rho)
+                        rho=rho, param_names=param_names)
       } else {
         result <- optim(par = par_init_modified,
                         fn = neg_total_binom_loglik,
@@ -121,7 +137,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
                         pi_t = pi_t,
                         group_pi = group_pi,
                         t = t, y = y, n = n,
-                        rho = rho)
+                        rho = rho, param_names=param_names)
       }
       convergence_attempt <- convergence_attempt + 1
     }
@@ -136,9 +152,9 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   }
 
-  bootstrap_samples <- create_boot_samps(t, y, n, boot_num * 2)
+  bootstrap_samples <- create_boot_samps(t, y, n, boot_num * 1.10) # allow 10% to fail if need be
 
-  if (is.na(type) || type != "Splines") {
+  if (is.na(foi_functional_form) || foi_functional_form != "Splines") {
     boot_results <- list()
     converged_count <- 0
     total_attempts <- 0
@@ -169,21 +185,22 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
                   pi_t = pi_t,
                   group_pi = group_pi,
                   t = t, y = boot_samp$y, n = n,
-                  rho = rho)
+                  rho = rho, param_names=param_names)
           } else {
             optim(par = par_init_modified,
                   fn = neg_total_binom_loglik,
                   method = "L-BFGS-B",
-                  control = list(maxit = maxit, factr = factr, trace=1),
+                  control = list(maxit = maxit, factr = factr, trace=trace),
                   lower = lower,
                   upper = upper,
                   pi_t = pi_t,
                   group_pi = group_pi,
                   t = t, y = boot_samp$y, n = n,
-                  rho = rho)
+                  rho = rho, param_names=param_names)
           }
         }, error = function(e) {
           message("Caught error in optim: ", e$message)
+          message(boot_samp$y)
           return(NULL)
         })
 
@@ -194,6 +211,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
       if (!is.null(result) && result$convergence == 0) {
         boot_results[[converged_count + 1]] <- result$par
         converged_count <- converged_count + 1
+        message(paste0("Bootstrap sample ", i, " converged."))
       } else {
         message(paste0("Bootstrap sample ", i, " failed to converge."))
 
@@ -222,6 +240,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
       return(NULL)
     }
     boot_matrix <- do.call(rbind, boot_results)
+    colnames(boot_matrix) <- param_names
 
     params_CI <- lapply(1:ncol(boot_matrix), function(i) {
       quantile(boot_matrix[, i], probs = c(0.025, 0.975), na.rm = TRUE)
@@ -233,7 +252,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   # Step 3: Find FOI MLE for each age group in t
   if (is.null(dim(t)) || ncol(t) == 1) {
-    if (!is.na(type) && type == "Splines") {
+    if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
       spline_pi_t <- smooth.spline(t, y/n)
       foi <- foi_t(t=t, spline_pi_t=spline_pi_t)
 
@@ -243,7 +262,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
       foi_MLE <- mapply(foi_t, t, MoreArgs = list(par = params_MLE))
     }
   } else {
-    if (!is.na(type) && type == "Splines") {
+    if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
       t_mid <- (t[,1] + t[,2]) / 2
       spline_pi_t <- smooth.spline(t_mid, y/n)
       foi <- mapply(group_foi, a = t[, 1], b = t[, 2])
@@ -262,7 +281,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     # if t is a vector or 1 col matrix, for each value in t, apply foi_t to every row in boot_matrix
     # if t is a 2 col matrix, for each row in t, pull out a and b and apply group_foi to every row in boot_matrix
     # then use quantile to get the 95% CI for the foi of each t category
-  if (!is.na(type) && type == "Splines") {
+  if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
     foi_mat <- sapply(bootstrap_samples, function(sample) {
       spline_pi_t <- smooth.spline(t, sample$y / n)
       foi_t(t = t, spline_pi_t = spline_pi_t)
@@ -289,7 +308,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
     paste0("[", t[,1], ",", t[,2], ")")  # interval labels
   }
 
-  if (!is.na(type) && type == "Splines") {
+  if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
     foi_list <- as.list(foi)
     names(foi_list) <- t_labels
   } else {
@@ -302,7 +321,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, group_pi = NA, rho=1, w=0, f
 
   #print(boot_matrix)
 
-  if (!is.na(type) && type == "Splines") {
+  if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
     return(list(foi=foi_list, foi_CI=foi_CI_list, foi_grid=foi_grid, boot_y, foi_t, spline_pi_t))
   }
 
