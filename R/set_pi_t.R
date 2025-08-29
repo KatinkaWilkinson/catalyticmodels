@@ -128,36 +128,82 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
     }
   }
 
+  # else if (catalytic_model_type == "WaningImmunity") {
+  #     w <- model_fixed_params$w
+  #     # pi_t: compute π(t) = 1 - ( exp(-∫_0^t [λ(x)+w] dx) + w ∫_0^t exp(-∫_u^t [λ(x)+w] dx) du )
+  #     pi_t <- function(t, par) {
+  #       pi_one <- function(tt) {
+  #         # integrand for ∫(λ(x)+w)dx
+  #         integrand <- function(x) foi_t(x, par) + w
+  #
+  #         # I0 = ∫_0^t (λ(x)+w) dx
+  #         I0 <- stats::integrate(integrand, lower = 0, upper = tt)$value
+  #
+  #         # inner: for each u, compute exp( - ∫_u^t (λ(x)+w) dx )
+  #         inner_exp <- function(u) {
+  #           Iu <- stats::integrate(integrand, lower = u, upper = tt)$value
+  #           exp(-Iu)
+  #         }
+  #
+  #         # term2 = w * ∫_0^t exp( - ∫_u^t (λ+ w) ) du
+  #         term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt)$value
+  #
+  #         # π(t) = 1 - ( e^{-I0} + term2 )
+  #         val <- 1 - (exp(-I0) + term2)
+  #
+  #         # clamp tiny numerical drift outside [0,1]
+  #         #max(0, min(1, val))
+  #       }
+  #
+  #     vapply(t, pi_one, numeric(1))
+  #   }
+  # }
+
   else if (catalytic_model_type == "WaningImmunity") {
-      w <- model_fixed_params$w
-      # pi_t: compute π(t) = 1 - ( exp(-∫_0^t [λ(x)+w] dx) + w ∫_0^t exp(-∫_u^t [λ(x)+w] dx) du )
-      pi_t <- function(t, par) {
-        pi_one <- function(tt) {
-          # integrand for ∫(λ(x)+w)dx
-          integrand <- function(x) foi_t(x, par) + w
+    w <- model_fixed_params$w  # seroreversion rate
 
-          # I0 = ∫_0^t (λ(x)+w) dx
-          I0 <- stats::integrate(integrand, lower = 0, upper = tt)$value
+    # helper: force any 1D function to return a vector matching x
+    vec1 <- function(f) {
+      function(x, ...) {
+        y <- f(x, ...)
+        if (length(y) == length(x)) return(y)
+        if (length(y) == 1L)       return(rep_len(y, length(x)))
+        vapply(x, function(xi) f(xi, ...), numeric(1))
+      }
+    }
 
-          # inner: for each u, compute exp( - ∫_u^t (λ(x)+w) dx )
-          inner_exp <- function(u) {
-            Iu <- stats::integrate(integrand, lower = u, upper = tt)$value
+    # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
+    pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+      # vectorised λ(x)+w
+      integrand <- vec1(function(x) foi_t(x, par) + w)
+
+      pi_one <- function(tt) {
+        if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+
+        # I0 = ∫_0^t (λ+w) dx
+        I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+        # inner_exp(u): return vector same length as u
+        inner_exp <- function(u) {
+          vapply(u, function(ui) {
+            Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
             exp(-Iu)
-          }
-
-          # term2 = w * ∫_0^t exp( - ∫_u^t (λ+ w) ) du
-          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt)$value
-
-          # π(t) = 1 - ( e^{-I0} + term2 )
-          val <- 1 - (exp(-I0) + term2)
-
-          # clamp tiny numerical drift outside [0,1]
-          #max(0, min(1, val))
+          }, numeric(1))
         }
+
+        # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
+        term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+        val <- 1 - (exp(-I0) + term2)
+        # optional clamp to [0,1]:
+        # val <- max(0, min(1, val))
+        return(val)
+      }
 
       vapply(t, pi_one, numeric(1))
     }
   }
+
 
   else if (catalytic_model_type == "Vaccine") {
     # ------------------------------------------------------------

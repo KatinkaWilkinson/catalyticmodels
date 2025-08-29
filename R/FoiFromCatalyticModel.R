@@ -167,7 +167,7 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
       convergence_attempt <- 1
       result <- list(convergence = -1)
       par_init_modified <- par_init
-      while (result$convergence != 0 && convergence_attempt < convergence_attempts) {
+      while (is.null(result) && convergence_attempt < convergence_attempts || result$convergence != 0 && convergence_attempt < convergence_attempts) {
         if (convergence_attempt != 1) {
           rnd <- runif(length(par_init), -0.5, 0.5) * abs(par_init)
           par_init_modified <- par_init + rnd
@@ -201,7 +201,6 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
         }, error = function(e) {
           message("Caught error in optim: ", e$message)
           message(boot_samp$y)
-          return(NULL)
         })
 
         convergence_attempt <- convergence_attempt + 1
