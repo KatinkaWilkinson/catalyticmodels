@@ -35,57 +35,53 @@
 #' @export
 set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, foi_t=NULL) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
-  if (!is.na(foi_functional_form)) {
-    if (catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
-      pi_t <- function(t, par) {
-        k <- par[["k"]]
-        l <- par[["l"]]
-        foi <- par[["foi"]]
-        return(k * (l - exp(-foi * t)))
-      }
+  if (!is.na(foi_functional_form) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
+    pi_t <- function(t, par) {
+      k <- par[["k"]]
+      l <- par[["l"]]
+      foi <- par[["foi"]]
+      return(k * (l - exp(-foi * t)))
     }
-
-    else if (catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
-      k <- model_fixed_params$k
-      l <- model_fixed_params$l
-      pi_t <- function(t, par) {
-        foi <- par[["foi"]]
-        return(k * (l - exp(-foi * t)))
-      }
-    }
-
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") { # linear with maternal antibodies is the actual form...
-      tau <- model_fixed_params$tau
-      pi_t <- function(t, par) {
-        gamma0 <- par[["gamma0"]]
-        gamma1 <- par[["gamma1"]]
-        return(ifelse(t <= tau, 0, 1 - exp(-((gamma0 / 2) * (t^2 - tau^2) + gamma0 * gamma1 * (t - tau)))))
-      }
-    }
-
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") { # linear dampered is the actual functional form
-      pi_t <- function(t, par) {
-        gamma0 <- par[["gamma0"]]
-        gamma1 <- par[["gamma1"]]
-        gamma2 <- par[["gamma2"]]
-        return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
-      }
-    }
-
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
-      upper_cutoffs <- model_fixed_params$upper_cutoffs
-      lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
-
-      pi_t <- function(t, par) {
-        foi_pieces <- par[ names(par) != "rho" ]
-        interval_lengths <- pmax(pmin(t, upper_cutoffs) - lower_cutoffs, 0)
-        cum_foi <- sum(foi_pieces * interval_lengths)
-        return(1 - exp(-cum_foi))
-      }
-    }
-    return(pi_t)
   }
 
+  else if (!is.na(foi_functional_form) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
+    k <- model_fixed_params$k
+    l <- model_fixed_params$l
+    pi_t <- function(t, par) {
+      foi <- par[["foi"]]
+      return(k * (l - exp(-foi * t)))
+    }
+  }
+
+  else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") { # linear with maternal antibodies is the actual form...
+    tau <- model_fixed_params$tau
+    pi_t <- function(t, par) {
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      return(ifelse(t <= tau, 0, 1 - exp(-((gamma0 / 2) * (t^2 - tau^2) + gamma0 * gamma1 * (t - tau)))))
+    }
+  }
+
+  else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") { # linear dampered is the actual functional form
+    pi_t <- function(t, par) {
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      gamma2 <- par[["gamma2"]]
+      return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
+    }
+  }
+
+  else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
+    upper_cutoffs <- model_fixed_params$upper_cutoffs
+    lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+
+    pi_t <- function(t, par) {
+      foi_pieces <- par[ names(par) != "rho" ]
+      interval_lengths <- pmax(pmin(t, upper_cutoffs) - lower_cutoffs, 0)
+      cum_foi <- sum(foi_pieces * interval_lengths)
+      return(1 - exp(-cum_foi))
+    }
+  }
 
   else if (catalytic_model_type == "OriginalCatalytic") { # potentiallyyyy incorporate k and l... do they also apply to the other models, though?
     # pi_t: compute π(t) = 1 - exp( -∫_0^t λ(x) dx )

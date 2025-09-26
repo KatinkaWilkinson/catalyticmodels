@@ -46,9 +46,7 @@
 #' @importFrom stats pnorm integrate
 #' @export
 set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t = NULL) { # type is a string, model_fixed_params is a list
-  # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
-  if (!is.na(foi_functional_form) && !is.na(catalytic_model_type)) {
-    if (catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
+    if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
       group_pi <- function(a, b, par) {
         k <- par[["k"]]
         l <- par[["l"]]
@@ -58,7 +56,7 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       }
     }
 
-    else if (catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
       k <- model_fixed_params$k
       l <- model_fixed_params$l
       group_pi <- function(a, b, par) {
@@ -68,7 +66,15 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       }
     }
 
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
+  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Constant") {
+    group_pi <- function(a, b, par) {
+      foi <- par[["foi"]]
+      return(1-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a)))
+      # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
+    }
+  }
+
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
       tau <- model_fixed_params$tau
       group_pi <- function(a, b, par) {
         gamma0 <- par[["gamma0"]]
@@ -102,7 +108,7 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       }
     }
 
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") {
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") {
       group_pi <- function(a, b, par) {
         gamma0 <- par[["gamma0"]]
         gamma1 <- par[["gamma1"]]
@@ -122,7 +128,7 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       }
     }
 
-    else if (catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
       # upper_cutoffs <- model_fixed_params$upper_cutoffs
       # lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
       upper_cutoffs <- model_fixed_params$upper_cutoffs
@@ -153,8 +159,6 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
         return(auc/(b-a))
       }
     }
-    return(group_pi)
-  }
 
 
   # else if (catalytic_model_type == "SimpleCatalytic" || catalytic_model_type == "OriginalCatalytic"|| catalytic_model_type == "RestrictedCatalytic"|| catalytic_model_type == "WaningImmunity" || catalytic_model_type == "Vaccine") {

@@ -1,0 +1,57 @@
+---
+title: "ReplicatingChinaStudy"
+format: html
+editor: visual
+---
+
+## Dataset 29:
+
+29. Jing, Q.; Li, Y.; Liu, J.; Jiang, L.; Chen, Z.; Su, W.; Birkhead, G.S.; Lu, J.; Yang, Z. Dengue Underestimation in Guangzhou, China: Evidence of Seroprevalence in Communities with No Reported Cases Before a Large Outbreak in 2014. Open Forum Infect. Dis. 2019, 6, ofz256. [CrossRef] [PubMed]
+
+https://academic.oup.com/ofid/article/6/7/ofz256/5510729?login=false
+
+```{r}
+t <- matrix(c(1,15,15,30,30,45,45,60,60,85), ncol=2,byrow=TRUE) # "1-84 years old"
+y <- c(10,6,13,13,14)
+n <- c(259,131,149,180,131)
+
+ModelA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower=c(0), upper=c(3))
+
+ModelA$params_MLE
+ModelA$params_CI
+
+
+##### for model C:
+# Paper results are:
+# A_crit = 72.7 (11.7,84.0)
+# foi1 = 0.0027(0.0014,0.0308)
+# foi2 = 0.0517(0.0014,0.1444)
+# R0 = 1.11(1.06,1.39)
+
+foi_t <- function(t, par) {
+  foi1 <- par[["foi1"]]
+  foi2 <- par[["foi2"]]
+  A_crit <- par[["A_crit"]]
+  ifelse(t < A_crit, foi1, foi2)
+}
+
+pi_t <- function(t, par) {
+  foi1 <- par[["foi1"]]
+  foi2 <- par[["foi2"]]
+  A_crit <- par[["A_crit"]]
+  ifelse(t < A_crit, 1-exp(-foi1), 1-exp(-foi2))
+}
+
+par_init <- c(foi1=0.003, foi2=0.052, A_crit=73)
+
+ModelC <- FoiFromCatalyticModel(t, y, n, foi_t=foi_t, pi_t=pi_t, lower=c(0.0001,0.0001,10), upper=c(0.8,0.8,80), par_init=par_init)
+
+ModelC$params_MLE
+ModelC$params_CI
+
+# I could not find city age distribution, so I used the province age distribution
+age_bins <- matrix(c(0,15,15,60,60,65,65,100), ncol=2, byrow=TRUE)
+pop_by_age <- c(23749882,86697562,15565066-10813000,10813000)
+
+R0(ModelC, age_bins, pop_by_age)
+```

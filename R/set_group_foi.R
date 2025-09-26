@@ -66,6 +66,22 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
         return(result)
       }
     }
+    
+    else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
+      w <- model_fixed_params$w
+      group_foi <- function(a, b, spline_pi_t) {
+        integrand <- function(x) {
+          pi_x <- predict(spline_pi_t, x)$y
+          dpi_x <- predict(spline_pi_t, x, deriv = 1)$y
+          pi_x <- pmin(pi_x, 1 - 1e-8) # to prevent a divide by 0 error
+          (dpi_x + pi_x*w) / (1 - pi_x)
+        }
+        result <- tryCatch({
+          integrate(integrand, a, b)$value / (b - a) #  approximate the mean FOI over [a, b)  by integrating the FOI (π′ / (1−π)) over that interval and dividing by the interval width
+        }, error = function(e) NA)
+        return(result)
+      }
+    }
 
   }
 

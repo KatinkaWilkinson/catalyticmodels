@@ -86,6 +86,21 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
       return(foi)
     }
   }
+  
+  else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
+    w <- model_fixed_params$w
+    foi_t <- function(t, spline_pi_t) {
+      pi <- predict(spline_pi_t, t)$y # y is the smooth.spline response name. "y" here is predicting pi(t) (we inputted y/n - this is what we are trying to predict. Remember, y/n=pi(t))
+      dpi_t_dt <- predict(spline_pi_t, t, deriv=1)$y
+      pi <- pmin(pi, 1 - 1e-8) # to prevent a divide by 0 error
+      foi <- (dpi_t_dt + pi*w) / (1 - pi)
+      
+      # dpi_t_dt <- diff(pi_t)/diff(t)
+      # foi_t <- dpi_t_dt / (1 - pi_t[-length(pi_t)]) this is what I used to have but apparently using splines is better for finding the derivative of pi_t
+      
+      return(foi)
+    }
+  }
 
   else {
     return(NA)

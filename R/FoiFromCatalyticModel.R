@@ -152,102 +152,118 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
 
   }
 
-  bootstrap_samples <- create_boot_samps(t, y, n, boot_num * 1.10) # allow 10% to fail if need be
+  # Step 2: Make parameter bootrap CIs
+  # Create a slightly larger set of bootstrap samples in case some fail
+  bootstrap_samples <- create_boot_samps(t, y, n, boot_num * 1.10)
 
-  if (is.na(foi_functional_form) || foi_functional_form != "Splines") {
-    boot_results <- list()
-    converged_count <- 0
-    total_attempts <- 0
-    max_attempts <- length(bootstrap_samples)
+  # Extract just the y-vectors for convenience
+  boot_y_list <- lapply(bootstrap_samples, `[[`, "y")
 
-    i <- 1
-    while (converged_count < boot_num && i <= max_attempts) {
-      boot_samp <- bootstrap_samples[[i]]
+  # Helper: fit one bootstrap sample with retries + jitter
+  fit_one_boot <- function(boot_samp_y,
+                           par_init, lower, upper,
+                           pi_t, group_pi, t, n, rho, param_names,
+                           maxit, factr, trace,
+                           convergence_attempts) {
 
-      convergence_attempt <- 1
-      result <- list(convergence = -1)
-      par_init_modified <- par_init
-      while (is.null(result) && convergence_attempt < convergence_attempts || result$convergence != 0 && convergence_attempt < convergence_attempts) {
-        if (convergence_attempt != 1) {
-          rnd <- runif(length(par_init), -0.5, 0.5) * abs(par_init)
-          par_init_modified <- par_init + rnd
-          par_init_modified <- pmax(pmin(par_init_modified, upper), lower)
-          # to make sure that initial vals are still within limits
-        }
-        result <- tryCatch({
-          if (length(par_init) == 1) {
-            optim(par = par_init_modified,
-                  fn = neg_total_binom_loglik,
-                  method = "Brent",
-                  control = list(maxit = maxit, trace=1),
-                  lower = lower,
-                  upper = upper,
-                  pi_t = pi_t,
-                  group_pi = group_pi,
-                  t = t, y = boot_samp$y, n = n,
-                  rho = rho, param_names=param_names)
-          } else {
-            optim(par = par_init_modified,
-                  fn = neg_total_binom_loglik,
-                  method = "L-BFGS-B",
-                  control = list(maxit = maxit, factr = factr, trace=trace),
-                  lower = lower,
-                  upper = upper,
-                  pi_t = pi_t,
-                  group_pi = group_pi,
-                  t = t, y = boot_samp$y, n = n,
-                  rho = rho, param_names=param_names)
-          }
-        }, error = function(e) {
-          message("Caught error in optim: ", e$message)
-          message(boot_samp$y)
-        })
+    convergence_attempt <- 1
+    result <- NULL
+    par_init_modified <- par_init
 
-        convergence_attempt <- convergence_attempt + 1
+    # retry loop
+    while ((is.null(result) || result$convergence != 0) &&
+           convergence_attempt <= convergence_attempts) {
+
+      if (convergence_attempt != 1) {
+        rnd <- runif(length(par_init), -0.5, 0.5) * abs(par_init)
+        par_init_modified <- pmax(pmin(par_init + rnd, upper), lower)
       }
 
-      total_attempts <- total_attempts + 1
-      if (!is.null(result) && result$convergence == 0) {
-        boot_results[[converged_count + 1]] <- result$par
-        converged_count <- converged_count + 1
-        message(paste0("Bootstrap sample ", i, " converged."))
-      } else {
-        message(paste0("Bootstrap sample ", i, " failed to converge."))
-
-        if (!is.null(result)) {
-          message("  Convergence code: ", result$convergence)
-          message("  Message: ", result$message)
-          message("  Par: ", paste(round(result$par, 4), collapse = ", "))
-          message("  Value: ", result$value)
-          message("  Bootstrap y:", boot_samp$y)
+      result <- tryCatch({
+        if (length(par_init) == 1) {
+          optim(par = par_init_modified,
+                fn = neg_total_binom_loglik,
+                method = "Brent",
+                control = list(maxit = maxit, trace = trace),
+                lower = lower, upper = upper,
+                pi_t = pi_t, group_pi = group_pi,
+                t = t, y = boot_samp_y, n = n,
+                rho = rho, param_names = param_names)
+        } else {
+          optim(par = par_init_modified,
+                fn = neg_total_binom_loglik,
+                method = "L-BFGS-B",
+                control = list(maxit = maxit, factr = factr, trace = trace),
+                lower = lower, upper = upper,
+                pi_t = pi_t, group_pi = group_pi,
+                t = t, y = boot_samp_y, n = n,
+                rho = rho, param_names = param_names)
         }
-      }
+      }, error = function(e) NULL)
 
-      i <- i + 1
+      convergence_attempt <- convergence_attempt + 1
     }
 
-    if (converged_count < boot_num) {
-      warning(paste("Only", converged_count, "bootstrap fits converged out of", boot_num, "required."))
-    }
-
-    # Optionally: report how many failed
-    cat("Total attempts: ", total_attempts, "\n")
-    cat("Failed fits: ", total_attempts - converged_count, "\n")
-
-    if (length(boot_results) == 0) {
-      warning("No bootstrap fits converged; cannot compute confidence intervals.")
-      return(NULL)
-    }
-    boot_matrix <- do.call(rbind, boot_results)
-    colnames(boot_matrix) <- param_names
-
-    params_CI <- lapply(1:ncol(boot_matrix), function(i) {
-      quantile(boot_matrix[, i], probs = c(0.025, 0.975), na.rm = TRUE)
-    })
-
-    names(params_CI) <- param_names
-
+    result  # raw optim object or NULL
   }
+
+
+  plan(multisession, workers = max(1, parallel::detectCores() - 1))
+
+  res_list <- future_lapply(
+    X = seq_along(boot_y_list),
+    FUN = function(i) {
+      fit_one_boot(
+        boot_samp_y = boot_y_list[[i]],
+        par_init = par_init, lower = lower, upper = upper,
+        pi_t = pi_t, group_pi = group_pi,
+        t = t, n = n, rho = rho, param_names = param_names,
+        maxit = maxit, factr = factr, trace = trace,
+        convergence_attempts = convergence_attempts
+      )
+    },
+    future.seed = TRUE
+  )
+
+  # ----- Summarise results -----
+  ok_logical <- vapply(
+    res_list,
+    function(r) !is.null(r) && !is.null(r$convergence) && r$convergence == 0,
+    logical(1)
+  )
+
+  total_runs    <- length(res_list)
+  converged_all <- sum(ok_logical)
+  failed_all    <- total_runs - converged_all
+
+  # pick first boot_num successful fits
+  ok_idx        <- which(ok_logical)
+  take_idx      <- head(ok_idx, boot_num)
+
+  cat("Total fits run: ", total_runs, "\n")
+  cat("Converged fits: ", converged_all, "\n")
+  cat("Failed fits:    ", failed_all, "\n")
+  cat("Used for CI:    ", length(take_idx), "\n")
+
+  if (length(take_idx) == 0) {
+    warning("No bootstrap fits converged; cannot compute confidence intervals.")
+    return(NULL)
+  }
+
+  boot_results <- lapply(res_list[take_idx], `[[`, "par")
+
+  # stack into a matrix
+  boot_matrix <- do.call(rbind, boot_results)
+  if (!is.null(param_names) && length(param_names) == ncol(boot_matrix)) {
+    colnames(boot_matrix) <- param_names
+  }
+
+  # compute percentile CIs
+  params_CI <- lapply(seq_len(ncol(boot_matrix)), function(i) {
+    quantile(boot_matrix[, i], probs = c(0.025, 0.975), na.rm = TRUE)
+  })
+  names(params_CI) <- colnames(boot_matrix)
+
 
   # Step 3: Find FOI MLE for each age group in t
   if (is.null(dim(t)) || ncol(t) == 1) {
@@ -276,11 +292,12 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
 
   # Step 4: Find FOI bootstrap CI
   # pseudocode:
-    # we have boot_matrix. each row contains the par values for one boot sample (therefore 1000 rows)
-    # if t is a vector or 1 col matrix, for each value in t, apply foi_t to every row in boot_matrix
-    # if t is a 2 col matrix, for each row in t, pull out a and b and apply group_foi to every row in boot_matrix
-    # then use quantile to get the 95% CI for the foi of each t category
+  # we have boot_matrix. each row contains the par values for one boot sample (therefore 1000 rows)
+  # if t is a vector or 1 col matrix, for each value in t, apply foi_t to every row in boot_matrix
+  # if t is a 2 col matrix, for each row in t, pull out a and b and apply group_foi to every row in boot_matrix
+  # then use quantile to get the 95% CI for the foi of each t category
   if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
+
     foi_mat <- sapply(bootstrap_samples, function(sample) {
       spline_pi_t <- smooth.spline(t, sample$y / n)
       foi_t(t = t, spline_pi_t = spline_pi_t)
@@ -321,9 +338,9 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
   #print(boot_matrix)
 
   if (!is.na(foi_functional_form) && foi_functional_form == "Splines") {
-    return(list(foi=foi_list, foi_CI=foi_CI_list, foi_grid=foi_grid, boot_y, foi_t, spline_pi_t))
-  }
+    return(list(foi=foi_list, foi_CI=foi_CI_list, foi_grid=foi_grid, t, boot_y, n, foi_t, spline_pi_t))
+  } # t, boot_y, n are used by R0... is there a better way to do this?
 
-  return(list(params_MLE = params_MLE_list, params_CI=params_CI, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t)) # output foi_t so that it can be used by plot!
+
+  return(list(params_MLE = params_MLE_list, params_CI=params_CI, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, pi_t=pi_t, group_pi=group_pi)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
 }
-

@@ -1,0 +1,893 @@
+---
+title: "Fitting_cat_to_sim"
+format: pdf
+---
+
+# Set up:
+
+```{r}
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//FoiFromCatalyticModel.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//Plot.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//set_foi_t.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//set_group_foi.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//set_group_pi.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_par_init.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//set_pi_t.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R//Utils.R'))
+
+# choose values (same for all)
+nsamps = 50      # number of serosamples generated 
+SliceYear = 125 # at what point in time you are sampling 
+boot_num <- 1000
+
+set.seed(123)
+```
+
+# POPULATION 1:
+
+## Simulate
+
+```{r}
+
+# install.packages("socialmixr")
+library(socialmixr)
+
+# Epidemic scenatio: Look at model after 1 year ####
+expEpidemic <- run_experiment(NYEAR=150, DT=1/12,
+                             CONTACT_TYPE="UK",  # Use CONTACT_TYPE=UK (default) for realistic age-mixing
+                             comp_props = c(0.99, 0.01, 0.0, 0.0, 0.0),  # Novel pathogen
+                             beta=0.1*400, sigma=365/5, gamma=365/14, omega=0)  # R0=beta/gamma
+saveRDS(expEpidemic, file = "expEpidemic1.rds")
+expEpidemic$IncidencePlot
+expEpidemic$SeroprevPlot
+expEpidemic$FOIPlot
+```
+
+## Sample
+
+```{r}
+
+# sample
+sero.samples <- sero_sampler(tbModelOut =  expEpidemic$ModelOutput,nsamps = nsamps, SliceYear = SliceYear)
+sero.samples
+
+t= sero.samples$t.sim # age intervals 
+n = sero.samples$n.sim # number of trials per interval
+
+foi.sim = sero.samples$foi.sim # true force of infection per bucket
+y.sims = sero.samples$y.sims # the positive counts in each sample ( rows for ages, cols for samples )
+
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi.sim)) + # main plot is true simulation FOI
+  geom_point() +
+  geom_line() +
+  geom_line(mapping = aes(x=age_grid, y=fois_lifelong), col="red") + # splines assuming lifelong immunity
+  geom_line(mapping = aes(x=age_grid, y=fois_waning0.1), col="blue") + # splines assuming waning immunity (w=0.1)
+  xlab("Age") +
+  ylab("True Force of Infection (FOI)") +
+  labs(title=(main="True simulation FOI after 75 years as well as splines estimates based on seroprevalence data (perfect assay sensitivity)"))
+
+
+
+library(ggplot2)
+
+# 1) Put everything into tidy frames
+df_true <- data.frame(
+  age = t_mid,
+  foi = as.numeric(foi.sim)
+)
+
+df_est <- data.frame(age = age_grid, foi = fois_lifelong,    model = "Splines (lifelong immunity)")
+
+# 2) Plot
+ggplot() +
+  # true FOI: points + thin line
+  geom_point(data = df_true, aes(x = age, y = foi), size = 1.8, alpha = 0.85) +
+  geom_line (data = df_true, aes(x = age, y = foi), linewidth = 0.5, alpha = 0.8) +
+
+  # spline estimates: colored lines
+  geom_line(data = df_est, aes(x = age, y = foi, color = model), linewidth = 1) +
+
+  # labels & legend
+  labs(
+    title = "True FOI vs spline-based estimates",
+    subtitle = "After 75 years; seroprevalence from a perfect-sensitivity assay",
+    x = "Age",
+    y = "Force of Infection (FOI)",
+    color = "Estimate"
+  ) +
+  # nice minimal theme
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(size = 11),
+    legend.text  = element_text(size = 10),
+    plot.title   = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Fit catalytic models
+
+```{r}
+library(future)
+library(future.apply)
+```
+### Splines (Simple Catalytic)
+
+```{r}
+catalytic_store_splines <- list()
+
+for (i in 1:nsamps) {
+
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num = boot_num)
+
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_splines[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_splines, "pop1_SimpleCatalyticSplines.rds") # 1000 bootsamps, 50 population samples
+
+
+#readRDS("pop1_SimpleCatalyticSplines.rds", catalytic_store_splines)
+
+catalytic_store_splines$samp1$foi
+catalytic_store_splines$samp2$foi
+catalytic_store_splines$samp3$foi
+
+catalytic_store_splines$samp1$foi_CI
+catalytic_store_splines$samp2$foi_CI
+catalytic_store_splines$samp3$foi_CI
+
+fois <- catalytic_store_splines$samp400$foi_grid
+ages <- catalytic_store_splines$samp400$t_grid
+
+plot(
+  ages, fois, type = "l", lwd = 2,
+  xlab = "Age", ylab = "Force of infection",
+  main = "Estimated FOI by age assuming lifelong immunity (splines)"
+)
+
+fois_lifelong <- catalytic_store_splines$samp1$foi_grid
+age_grid <- catalytic_store_splines$samp1$t_grid
+```
+
+### Splines (Waning Immunity)
+
+```{r}
+##################### w=0.1
+
+catalytic_store_splines_waning <- list()
+
+for (i in 1:nsamps) {
+  
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=0.1), boot_num = boot_num) # w=0.001 means?? 
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_splines_waning[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_splines_waning$samp1$foi
+catalytic_store_splines_waning$samp2$foi
+catalytic_store_splines_waning$samp3$foi
+
+catalytic_store_splines_waning$samp1$foi_CI
+catalytic_store_splines_waning$samp2$foi_CI
+catalytic_store_splines_waning$samp3$foi_CI
+
+fois <- catalytic_store_splines_waning$samp2$foi_grid
+ages <- catalytic_store_splines_waning$samp2$t_grid
+plot(
+  ages, fois, type = "l", lwd = 2,
+  xlab = "Age", ylab = "Force of infection",
+  main = "Estimated FOI by age assuming waning immunity (w=0.1)"
+)
+
+fois_waning0.1 <- catalytic_store_splines_waning$samp2$foi_grid
+
+
+########################## w=0.2
+
+catalytic_store_splines_waning <- list()
+
+for (i in 1:nsamps) {
+  
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1), boot_num = boot_num) # w=0.001 means?? 
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_splines_waning[[name]] <- res.i  # assign value to that name
+}
+
+
+catalytic_store_splines_waning$samp1$foi
+catalytic_store_splines_waning$samp2$foi
+catalytic_store_splines_waning$samp3$foi
+
+catalytic_store_splines_waning$samp1$foi_CI
+catalytic_store_splines_waning$samp2$foi_CI
+catalytic_store_splines_waning$samp3$foi_CI
+
+fois <- catalytic_store_splines_waning$samp2$foi_grid
+ages <- catalytic_store_splines_waning$samp2$t_grid
+plot(
+  ages, fois, type = "l", lwd = 2,
+  xlab = "Age", ylab = "Force of infection",
+  main = "Estimated FOI by age assuming waning immunity (w=1)"
+)
+
+fois_waning0.2 <- catalytic_store_splines_waning$samp2$foi_grid
+```
+
+
+### Muench General
+
+```{r}
+# I know you can do this with parallelisation to make it faster 
+# was working on that when I called you x
+
+# pi_t <- function(t, par) {
+#         k <- par[["k"]]
+#         l <- par[["l"]]
+#         foi <- par[["foi"]]
+#         return(k * (l - exp(-foi * t)))
+# }
+# 
+# foi_t <- function(t, par) {
+#       foi <- par[["foi"]]
+#       return(rep(foi, length(t))) # constant foi.
+# }
+# 
+# par_init <- c(k=0.8, l=0.8, foi=0.5)
+
+# -----------------
+catalytic_store_muench_general <- list()
+
+for (i in 1:nsamps) {
+  
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "OriginalCatalytic", foi_functional_form = "Constant", lower = c(0,0,0), upper = c(4,1,1), boot_num = boot_num)
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_muench_general[[name]] <- res.i  # assign value to that name
+}
+
+
+catalytic_store_muench_general$samp1$params_MLE
+catalytic_store_muench_general$samp2$params_MLE
+catalytic_store_muench_general$samp3$params_MLE
+
+catalytic_store_muench_general$samp1$params_CI
+catalytic_store_muench_general$samp2$params_CI
+catalytic_store_muench_general$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_muench_general$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+
+### Muench Restricted (here we choose k=1, l=1)
+
+```{r}
+catalytic_store_muench_restricted <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "RestrictedCatalytic", foi_functional_form = "Constant", lower = c(0), upper = c(4), model_fixed_params = list(k=1, l=1), boot_num=boot_num)
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_muench_restricted[[name]] <- res.i  # assign value to that name
+}
+
+
+catalytic_store_muench_restricted$samp1$params_MLE
+catalytic_store_muench_restricted$samp2$params_MLE
+catalytic_store_muench_restricted$samp3$params_MLE
+
+catalytic_store_muench_restricted$samp1$params_CI
+catalytic_store_muench_restricted$samp2$params_CI
+catalytic_store_muench_restricted$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_muench_restricted$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+
+### Griffith
+```{r}
+
+########## For some reason this is being problematic!!!! I will look into it.
+
+catalytic_store_griffiths <- list()
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Griffiths", model_fixed_params = list(tau=0.5), lower = c(-0.01, -130), upper = c(-0.0001, 0), par_init = c(gamma0 = -0.0001, gamma1 = -110), boot_num = boot_num)
+  catalytic_store_griffiths[[name]] <- res.i  # assign value to that name
+}
+
+######## griffiths hard-coded!
+catalytic_store_griffiths <- list()
+
+pi_t <- function(t, par) {
+      tau <- 0.5
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      return(ifelse(t <= tau, 1, 1 - exp(-((gamma0 / 2) * (t^2 - tau^2) + gamma0 * gamma1 * (t - tau)))))
+}
+
+foi_t <- function(t, par) {
+      tau <- 0.5
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      return(ifelse(t <= tau, 0, gamma0 * (t + gamma1)))
+}
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t = pi_t, foi_t = foi_t, lower = c(-0.01, -130), upper = c(-0.0001, 0), par_init = c(gamma0 = -0.0001, gamma1 = -110), boot_num = boot_num) # NOTE I MADE BOOT_NUM VERY SMALL!!!!
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_griffiths[[name]] <- res.i  # assign value to that name
+}
+
+
+catalytic_store_griffiths$samp1$params_MLE
+catalytic_store_griffiths$samp2$params_MLE
+catalytic_store_griffiths$samp3$params_MLE
+
+catalytic_store_griffiths$samp1$params_CI
+catalytic_store_griffiths$samp2$params_CI
+catalytic_store_griffiths$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_griffiths$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+
+### Farrington
+```{r}
+catalytic_store_farringtons <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_farringtons$samp1$params_MLE
+catalytic_store_farringtons$samp2$params_MLE
+catalytic_store_farringtons$samp3$params_MLE
+
+catalytic_store_farringtons$samp1$params_CI
+catalytic_store_farringtons$samp2$params_CI
+catalytic_store_farringtons$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_farringtons$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+
+
+### Waning
+```{r}
+#I chose a piecewise constant here but you can choose ANY one!
+
+catalytic_store_waning <- list()
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Constant", boot_num = boot_num, model_fixed_params = list(w=0.005), lower = c(0), upper = c(1))
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_waning[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_waning$samp1$params_MLE
+catalytic_store_waning$samp2$params_MLE
+catalytic_store_waning$samp3$params_MLE
+
+catalytic_store_waning$samp1$params_CI
+catalytic_store_waning$samp2$params_CI
+catalytic_store_waning$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_waning$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+
+
+### 
+```
+
+### PiecewiseConstant
+```{r}
+catalytic_store_piecewiseconstant1 <- list()
+
+### lots of pieces so will take long to run!!! (lots of parameters in the optimisation!)
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(1,5,10,15,20,30,40,50,60)), lower = rep(0,6), upper = rep(0.2,6), boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_piecewiseconstant1[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_piecewiseconstant1$samp1$params_MLE
+catalytic_store_piecewiseconstant1$samp2$params_MLE
+catalytic_store_piecewiseconstant1$samp3$params_MLE
+
+catalytic_store_piecewiseconstant1$samp1$params_CI
+catalytic_store_piecewiseconstant1$samp2$params_CI
+catalytic_store_piecewiseconstant1$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_piecewiseconstant1$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+
+### this one is quicker!
+
+catalytic_store_piecewiseconstant2 <- list()
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(1,5,10,15,20,60)), boot_num = boot_num, lower = rep(0,6), upper = rep(0.2,6))
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_piecewiseconstant2[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_piecewiseconstant2$samp1$params_MLE
+catalytic_store_piecewiseconstant2$samp2$params_MLE
+catalytic_store_piecewiseconstant2$samp3$params_MLE
+
+catalytic_store_piecewiseconstant2$samp1$params_CI
+catalytic_store_piecewiseconstant2$samp2$params_CI
+catalytic_store_piecewiseconstant2$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_piecewiseconstant2$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+
+```
+### Imperfect sensitivity
+```{r}
+## in this example we will use farringtons (just because it looks like it did a good job)! But any model can be used
+catalytic_store_farringtons_rho0.9 <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), rho = 0.9, boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons_rho0.9[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_farringtons_rho0.9$samp1$params_MLE
+catalytic_store_farringtons_rho0.9$samp2$params_MLE
+catalytic_store_farringtons_rho0.9$samp3$params_MLE
+
+catalytic_store_farringtons_rho0.9$samp1$params_CI
+catalytic_store_farringtons_rho0.9$samp2$params_CI
+catalytic_store_farringtons_rho0.9$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_farringtons_rho0.9$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+
+### Unknown sensitivity
+```{r}
+## in this example we will use farringtons (just because it looks like it did a good job)! But any model can be used
+catalytic_store_farringtons_rhoNA <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), rho = NA, boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons_rhoNA[[name]] <- res.i  # assign value to that name
+}
+
+catalytic_store_farringtons_rhoNA$samp1$params_MLE
+catalytic_store_farringtons_rhoNA$samp2$params_MLE
+catalytic_store_farringtons_rhoNA$samp3$params_MLE
+
+catalytic_store_farringtons_rhoNA$samp1$params_CI
+catalytic_store_farringtons_rhoNA$samp2$params_CI
+catalytic_store_farringtons_rhoNA$samp3$params_CI
+
+foi_vec <- unlist(catalytic_store_farringtons_rhoNA$samp2$foi_MLE)
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi_vec)) +
+  geom_point() +
+  geom_line()
+```
+```{r}
+
+
+
+plot_foi_grid(list(Muench = catalytic_store_muench_general$samp2, Constant = catalytic_store_muench_restricted$samp2, Griffiths = catalytic_store_griffiths$samp2, DamperedLinear = catalytic_store_farringtons$samp2, WaningConstant = catalytic_store_waning$samp2, PiecewiseConstant = catalytic_store_piecewiseconstant1$samp2, DamperredLinear_ImperfectSensitivity = catalytic_store_farringtons_rho0.9$samp2, DamperedLinear_UnknownSensitivity = catalytic_store_farringtons_rhoNA$samp2), 
+              0, 
+              50, 
+              confint = FALSE)
+
+# effect of waning immunity - foi is estimated to be higher (as expected)
+plot_foi_grid(list(Constant = catalytic_store_muench_restricted$samp2, WaningConstant = catalytic_store_waning$samp2), 
+              0, 
+              50, 
+              confint = TRUE)
+
+# effect of sensitivity imperfect/unknown (the lower the sensitivity, the higher up the plot is shifted)
+plot_foi_grid(list(DamperedLinear = catalytic_store_farringtons$samp2, DamperredLinear_ImperfectSensitivity = catalytic_store_farringtons_rho0.9$samp2, DamperedLinear_UnknownSensitivity = catalytic_store_farringtons_rhoNA$samp2), 
+              0, 
+              50, 
+              confint = FALSE)
+
+# effect of adding more pieces to the piecewise constant
+plot_foi_grid(list(Constant = catalytic_store_muench_restricted$samp2, PiecewiseConstant1 = catalytic_store_piecewiseconstant1$samp2, PiecewiseConstant2 = catalytic_store_piecewiseconstant2$samp2), 
+              0, 
+              50, 
+              confint = TRUE)
+
+# plot with everything + confints
+plot_foi_grid(list(Muench = catalytic_store_muench_general$samp2, Constant = catalytic_store_muench_restricted$samp2, Griffiths = catalytic_store_griffiths$samp2, DamperedLinear = catalytic_store_farringtons$samp2, WaningConstant = catalytic_store_waning$samp2, PiecewiseConstant = catalytic_store_piecewiseconstant1$samp2, Farringtons_ImperfectSensitivity = catalytic_store_farringtons_rho0.9$samp2, Farringtons_UnknownSensitivity = catalytic_store_farringtons_rhoNA$samp2), 
+              0, 
+              50, 
+              confint = TRUE)
+
+
+### plotting everything together
+
+t_grid <- seq(0,60, length.out=1000)
+
+
+const_foi <- catalytic_store_muench_restricted$samp2$params_MLE$foi
+ConstantData <- rep(const_foi, 1000)
+
+gamma0 <- catalytic_store_griffiths$samp2$params_MLE$gamma0
+gamma1 <- catalytic_store_griffiths$samp2$params_MLE$gamma1
+LinearData <- gamma0*(t_grid + gamma1)
+
+par <- unlist(catalytic_store_farringtons$samp2$params_MLE)
+DampedLinearData <- catalytic_store_farringtons$samp2$foi_t(t_grid, par)
+
+
+par <- unlist(catalytic_store_piecewiseconstant1$samp2$params_MLE)
+PiecewiseConstant <- catalytic_store_piecewiseconstant1$samp2$foi_t(t_grid, par)
+  
+  
+par <- catalytic_store_griffiths$samp2$params_MLE
+MaternalAntibodies <- catalytic_store_griffiths$samp2$foi_t(t_grid, par)
+
+
+```
+
+```{r}
+# y-range across all series
+yrng <- range(ConstantData, LinearData, DampedLinearData,
+              PiecewiseConstant, MaternalAntibodies, na.rm = TRUE)
+
+# Constant first (thicker, red)
+plot(t_grid, PiecewiseConstant, type = "l", col = "red", lwd = 3,
+     xlab = "Age (t)", ylab = expression(lambda(t)), ylim = yrng)
+
+# Others in black
+lines(t_grid, MaternalAntibodies,          col = "black", lwd = 1)
+lines(t_grid, ConstantData,    col = "black", lwd = 1)
+lines(t_grid, LinearData,   col = "black", lwd = 1)
+lines(t_grid, DampedLinearData,  col = "black", lwd = 1)
+```
+# stuff to run overnight
+```{r}
+nsamps = 50      # number of serosamples generated 
+SliceYear = 125 # at what point in time you are sampling 
+boot_num <- 1000
+
+set.seed(123)
+
+# install.packages("socialmixr")
+library(socialmixr)
+
+# Epidemic scenatio: Look at model after 1 year ####
+expEpidemic <- run_experiment(NYEAR=150, DT=1/12,
+                             CONTACT_TYPE="UK",  # Use CONTACT_TYPE=UK (default) for realistic age-mixing
+                             comp_props = c(0.99, 0.01, 0.0, 0.0, 0.0),  # Novel pathogen
+                             beta=0.1*400, sigma=365/5, gamma=365/14, omega=0)  # R0=beta/gamma
+saveRDS(expEpidemic, file = "expEpidemic1.rds")
+expEpidemic$IncidencePlot
+expEpidemic$SeroprevPlot
+expEpidemic$FOIPlot
+
+# sample
+sero.samples <- sero_sampler(tbModelOut =  expEpidemic$ModelOutput,nsamps = nsamps, SliceYear = SliceYear)
+sero.samples
+
+t= sero.samples$t.sim # age intervals 
+n = sero.samples$n.sim # number of trials per interval
+
+foi.sim = sero.samples$foi.sim # true force of infection per bucket
+y.sims = sero.samples$y.sims # the positive counts in each sample ( rows for ages, cols for samples )
+
+t_mid <- (t[,1] + t[,2]) / 2
+ggplot(mapping = aes(x=t_mid, y=foi.sim)) + # main plot is true simulation FOI
+  geom_point() +
+  geom_line() +
+  geom_line(mapping = aes(x=age_grid, y=fois_lifelong), col="red") + # splines assuming lifelong immunity
+  geom_line(mapping = aes(x=age_grid, y=fois_waning0.1), col="blue") + # splines assuming waning immunity (w=0.1)
+  xlab("Age") +
+  ylab("True Force of Infection (FOI)") +
+  labs(title=(main="True simulation FOI after 75 years as well as splines estimates based on seroprevalence data (perfect assay sensitivity)"))
+
+# splines simple catalytic
+catalytic_store_splines <- list()
+
+for (i in 1:nsamps) {
+
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num = boot_num)
+
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_splines[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_splines, "pop1_SimpleCatalyticSplines.rds") # 1000 bootsamps, 50 population samples
+
+#splines waning immunity
+catalytic_store_splines_waning <- list()
+
+for (i in 1:nsamps) {
+  
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=0.1), boot_num = boot_num) # w=0.001 means?? 
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_splines_waning[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_splines_waning, "pop1_WaningSplines.rds") # 1000 bootsamps, 50 population samples
+
+# muench general
+catalytic_store_muench_general <- list()
+
+for (i in 1:nsamps) {
+  
+  # res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,4)) # I commented this out because the built in types are optimised (ie, there are no integrals happening in the optimisation so they run muuuch faster!)
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "OriginalCatalytic", foi_functional_form = "Constant", lower = c(0,0,0), upper = c(4,1,1), boot_num = boot_num)
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_muench_general[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_muench_general, "pop1_MuenchGeneral.rds") # 1000 bootsamps, 50 population samples
+
+# muench restricted
+catalytic_store_muench_restricted <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "RestrictedCatalytic", foi_functional_form = "Constant", lower = c(0), upper = c(4), model_fixed_params = list(k=1, l=1), boot_num=boot_num)
+  
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_muench_restricted[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_muench_restricted, "pop1_MuenchRestricted.rds") # 1000 bootsamps, 50 population samples
+
+# griffiths
+catalytic_store_griffiths <- list()
+
+pi_t <- function(t, par) {
+      tau <- 0.5
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      return(ifelse(t <= tau, 1, 1 - exp(-((gamma0 / 2) * (t^2 - tau^2) + gamma0 * gamma1 * (t - tau)))))
+}
+
+foi_t <- function(t, par) {
+      tau <- 0.5
+      gamma0 <- par[["gamma0"]]
+      gamma1 <- par[["gamma1"]]
+      return(ifelse(t <= tau, 0, gamma0 * (t + gamma1)))
+}
+
+for (i in 1:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, pi_t = pi_t, foi_t = foi_t, lower = c(-0.01, -130), upper = c(-0.0001, 0), par_init = c(gamma0 = -0.0001, gamma1 = -110), boot_num = boot_num) # NOTE I MADE BOOT_NUM VERY SMALL!!!!
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_griffiths[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_griffiths, "pop1_Griffiths.rds") # 1000 bootsamps, 50 population samples
+
+# farrington
+catalytic_store_farringtons <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_farringtons, "pop1_Farringtons.rds") # 1000 bootsamps, 50 population samples
+
+# PiecewiseConstant
+catalytic_store_piecewiseconstant <- list()
+
+for (i in 29:nsamps) {
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(1,5,10,15,20,60)), boot_num = boot_num, lower = rep(0,6), upper = rep(0.2,6))
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_piecewiseconstant[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_piecewiseconstant, "pop1_PiecewiseConstant.rds") # 1000 bootsamps, 50 population samples
+
+# Imperfect Sensitivity
+catalytic_store_farringtons_rho0.9 <- list()
+
+for (i in 1:nsamps) {
+  
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), rho = 0.9, boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons_rho0.9[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_farringtons_rho0.9, "pop1_ImperfectSensitivity.rds") # 1000 bootsamps, 50 population samples
+
+
+# unknown sensitivity
+catalytic_store_farringtons_rhoNA <- list()
+
+for (i in 19:nsamps) {
+  print(i)
+  res.i <- FoiFromCatalyticModel(t, sero.samples$y.sims[,i], n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper = c(1,1,1), rho = NA, boot_num = boot_num)
+  name <- paste0("samp", i)   # create name like "samp1"
+  catalytic_store_farringtons_rhoNA[[name]] <- res.i  # assign value to that name
+}
+
+saveRDS(catalytic_store_farringtons_rhoNA, "pop1_UnknownSensitivity.rds") # 1000 bootsamps, 50 population samples
+
+```
+
+
+
+# POPULATION 2: Waning Immunity
+
+## Simulate
+
+```{r}
+source(here::here('sero_hons_proj_utils.R'))
+
+# install.packages("socialmixr")
+library(socialmixr)
+
+# Epidemic scenatio: Look at model after 1 year ####
+expEpidemic2 <- run_experiment(NYEAR=1, DT=1/12,
+                             CONTACT_TYPE="UK",  # Use CONTACT_TYPE=UK (default) for realistic age-mixing
+                             comp_props = c(0.99, 0.01, 0.0, 0.0, 0.0),  # Novel pathogen
+                             beta=0.1*400, sigma=365/5, gamma=365/14, omega=0.2)  # R0=beta/gamma
+expEpidemic2$IncidencePlot
+expEpidemic2$SeroprevPlot
+expEpidemic2$FOIPlot
+```
+
+## Sample
+
+```{r}
+# sample
+sero.samples2 <- sero_sampler(tbModelOut =  expEpidemic2$ModelOutput,nsamps = nsamps, SliceYear = sliceYear)
+```
+
+## Fit catalytic models
+
+### Muench
+
+### Griffith
+
+### Farrington
+
+### Waning
+
+### VynnyckyA
+
+### VynnyckyB
+
+### VynnyckyC
+
+### VynnyckyD
+
+# POPULATION 3: Sample Sensitivity
+
+Change the sensitivity of the assay in sampling
+
+## Simulate
+
+```{r}
+source(here::here('sero_hons_proj_utils.R'))
+
+# install.packages("socialmixr")
+library(socialmixr)
+
+# Epidemic scenatio: Look at model after 1 year ####
+expEpidemic3 <- run_experiment(NYEAR=1, DT=1/12,
+                             CONTACT_TYPE="UK",  # Use CONTACT_TYPE=UK (default) for realistic age-mixing
+                             comp_props = c(0.99, 0.01, 0.0, 0.0, 0.0),  # Novel pathogen
+                             beta=0.1*400, sigma=365/5, gamma=365/14, omega=0)  # R0=beta/gamma
+expEpidemic3$IncidencePlot
+expEpidemic3$SeroprevPlot
+expEpidemic3$FOIPlot
+```
+
+## Sample
+
+```{r}
+# choose test sensitivity to be less than 1
+
+# sample
+sero.samples3 <- sero_sampler(tbModelOut =  expEpidemic3$ModelOutput,nsamps = nsamps, SliceYear = sliceYear,TestSensitivity = 0.9)
+```
+
+## Fit catalytic models
+
+### Muench
+
+### Griffith
+
+### Farrington
+
+### Waning
+
+### VynnyckyA
+
+### VynnyckyB
+
+### VynnyckyC
+
+### VynnyckyD
+
+# Plots for presentation
+```{r}
+# true foi
+t= sero.samples$t.sim # age intervals 
+t_mid <- (t[,1] + t[,2]) / 2
+foi.sim = sero.samples$foi.sim # true force of infection per bucket
+
+# Splines
+plot_foi_grid(list("Simple Catalytic Spline" = catalytic_store_splines$samp9, "Waning Immunity Spline" = catalytic_store_splines_waning$samp9), 
+              0,
+              50,
+              confint = FALSE, 
+              true_foi = list(t=t_mid, foi=foi.sim))
+
+
+# Constants and linear
+plot_foi_grid(list("Constant" = catalytic_store_muench_restricted$samp9, "PiecewiseConstant" = catalytic_store_piecewiseconstant$samp9, "Linear + Maternal Antibodies" = catalytic_store_griffiths$samp9), 
+              0,
+              50,
+              confint = FALSE, 
+              true_foi = list(t=t_mid, foi=foi.sim))
+
+
+# Farringtons
+plot_foi_grid(list("Farringtons: 100% Sensitivity" = catalytic_store_farringtons$samp3, "Farringtons: 90% Sensitivity" = catalytic_store_farringtons_rho0.9$samp9, "Farringtons: Unknown Sensitivity"=catalytic_store_farringtons_rhoNA$samp9), 
+              0,
+              50,
+              confint = FALSE, 
+              true_foi = list(t=t_mid, foi=foi.sim))
+
+```
