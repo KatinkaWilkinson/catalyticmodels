@@ -87,6 +87,8 @@ neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho, param_name
   p_seropos_result <- pmin(pmax(p_seropos_result, 1e-8), 1 - 1e-8)
 
   # Log-likelihood of observed seropositive counts under binomial
+
+  # LOGLIK VERSION
   ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
 
   total_ll <- sum(ll)
@@ -98,6 +100,15 @@ neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho, param_name
 
   # Return negative log-likelihood for minimization
   return(-total_ll)
+
+  # # DEVIANCE VERSION
+  # loglik_deviance <- -2*(sum(y*log(p_seropos_result) + (n-y)*log(1-p_seropos_result) - y*log(y/n) - (n-y)*log(1-y/n)))
+  #
+  # if (!is.finite(loglik_deviance)) {
+  #   return(1e6)
+  # }
+  #
+  # return(loglik_deviance)
 }
 
 ## NEW VERSION BELOW!!! Maybe uncomment!!!

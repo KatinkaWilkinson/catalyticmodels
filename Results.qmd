@@ -1,0 +1,1762 @@
+---
+title: "Results"
+format: html
+editor: visual
+---
+
+# Setup
+
+```{r}
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/FoiFromCatalyticModel.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/FoiFromCatalyticModel_unparallelised.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/Plot.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_foi_t.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_group_foi.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_group_pi.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_par_init.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/set_pi_t.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/Utils.R'))
+source(here::here('C:/Users/Admin/Documents/UCT 2025 Honours/HonoursThesis-Packages/catalyticmodels/R/Checks.R'))
+
+```
+
+## Data
+
+```{r}
+waning.sample.2yrs <- readRDS("SimulatedData_Samples/waning.sample.2yrs.rds")
+waning.sample.10yrs <- readRDS("SimulatedData_Samples/waning.sample.10yrs.rds")
+waning.sample.15yrs <- readRDS("SimulatedData_Samples/waning.sample.15yrs.rds")
+homo.waning.sample <- readRDS("SimulatedData_Samples/homo.waning.sample.rds")
+sensitivity.sample <- readRDS("SimulatedData_Samples/sensitivity.sample.rds")
+no.waning.sample <- readRDS("SimulatedData_Samples/no.waning.sample.rds")
+ 
+```
+
+## COMPARING R AND EIRZ SEROPREVALENCE
+
+```{r}
+lifelong_EIRZ <- readRDS("SimulatedData_Samples/lifelong.samples.rds")
+lifelong_R <- readRDS("SimulatedData_Samples/COMPARE.lifelong.immunity.sample.rds")
+
+dim(lifelong_EIRZ$y.sims)
+dim(lifelong_R$y.sims)
+
+apply(lifelong_EIRZ$y.sims, 1, mean)
+apply(lifelong_R$y.sims, 1, mean)
+```
+
+## How precisely must one know assay sensitivity?
+
+-   Simulate data with 90% sensitivity o Fit Farrington model (rho=1, rho=0.9, rho=0.8, rho=NA)
+
+```{r}
+t_rho0.9 <- sensitivity.sample$t.sim
+y_rho0.9 <- sensitivity.sample$y.sims
+n_rho0.9 <- sensitivity.sample$n.sim
+true_foi_rho0.9 <- sensitivity.sample$dCFOI
+t_mid_rho0.9 <- (t_rho0.9[,1] + t_rho0.9[,2])/2
+
+prop_seropos
+
+Farrington_rho1 <- FoiFromCatalyticModel(t_rho0.9, y_rho0.9, n_rho0.9, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1))
+# 
+Farrington_rho0.9 <- FoiFromCatalyticModel(t_rho0.9, y_rho0.9, n_rho0.9, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), rho=0.9)
+# 
+Farrington_rho0.8 <- FoiFromCatalyticModel(t_rho0.9, y_rho0.9, n_rho0.9, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(2,2,4), rho=0.8)
+#
+Farrington_rho0.75 <- FoiFromCatalyticModel(t_rho0.9, y_rho0.9, n_rho0.9, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(2,2,3), rho=0.75)
+#
+Farrington_rhoNA <- FoiFromCatalyticModel(t_rho0.9, y_rho0.9, n_rho0.9, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(2,2,3), rho=NA)
+
+saveRDS(Farrington_rho1, "Farrington_rho1.rds")
+saveRDS(Farrington_rho0.9, "Farrington_rho0.9.rds")
+saveRDS(Farrington_rho0.8, "Farrington_rho0.8.rds")
+saveRDS(Farrington_rho0.75, "Farrington_rho0.75.rds")
+saveRDS(Farrington_rhoNA, "Farrington_rhoNA.rds")
+
+
+Farrington_rho1 <- readRDS("Farrington_rho1.rds")
+Farrington_rho0.9 <- readRDS("Farrington_rho0.9.rds")
+Farrington_rho0.8 <- readRDS("Farrington_rho0.8.rds")
+Farrington_rhoNA <- readRDS("Farrington_rhoNA.rds")
+
+ResultPlot_assay_sensitivity <- plot_foi_grid(list("ρ = 1"=Farrington_rho1, "ρ = 0.9"=Farrington_rho0.9, "ρ = 0.8"=Farrington_rho0.8,  "ρ = 0.75"=Farrington_rho0.75, "ρ = unknown"=Farrington_rhoNA), from=0, to=60, true_foi = list(t=t_mid_rho0.9, foi=true_foi_rho0.9), confint=TRUE)
+ResultPlot_assay_sensitivity
+
+ResultPlot_assay_sensitivity_noCI <- plot_foi_grid(list("ρ = 1"=Farrington_rho1, "ρ = 0.9"=Farrington_rho0.9, "ρ = 0.75"=Farrington_rho0.75, "ρ = 0.8"=Farrington_rho0.8, "ρ = unknown"=Farrington_rho0.NA), from=0, to=60, true_foi = list(t=t_mid_rho0.9, foi=true_foi_rho0.9))
+ResultPlot_assay_sensitivity_noCI
+
+ggsave("ResultsPlots/ResultPlot_assay_sensitivity.png", plot = ResultPlot_assay_sensitivity, width = 6, height = 4, units = "in", dpi = 300)
+
+ggsave("ResultsPlots/ResultPlot_assay_sensitivity_noCI.png", plot = ResultPlot_assay_sensitivity_noCI, width = 6, height = 4, units = "in", dpi = 300)
+
+Farrington_rho1$foi_MLE
+```
+#AIC vals
+```{r}
+AIC_rho1 <- Farrington_rho1$AIC
+AIC_rho0.9 <- Farrington_rho0.9$AIC
+AIC_rho0.8 <- Farrington_rho0.8$AIC
+AIC_rho0.75 <- Farrington_rho0.75$AIC
+AIC_rhoNA <- Farrington_rhoNA$AIC
+
+library(tidyverse)
+
+aic_tbl <- tibble(
+  `Assumed rho` = c("1.00 (observed)", "0.90", "0.80", "0.75", "free (estimated)"),
+  AIC = c(AIC_rho1, AIC_rho0.9, AIC_rho0.8, AIC_rho0.75, AIC_rhoNA)
+) %>%
+  arrange(AIC) %>%
+  mutate(`ΔAIC` = AIC - min(AIC))
+
+aic_tbl
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# --- Helper to tidy one Farrington fit into a data frame
+farrington_to_df <- function(obj, label) {
+  ages  <- names(obj$foi_MLE)
+  foi   <- vapply(obj$foi_MLE, `[`, numeric(1), 1)
+  lower <- vapply(obj$foi_CIs, function(x) unname(x["2.5%"]),  numeric(1))
+  upper <- vapply(obj$foi_CIs, function(x) unname(x["97.5%"]), numeric(1))
+  data.frame(age = ages, model = label, foi = foi, lower = lower, upper = upper, 
+             stringsAsFactors = FALSE)
+}
+
+# --- Collect models you have in your environment
+models_list <- list(
+  "rho1"   = Farrington_rho1,
+  "rho0.9" = Farrington_rho0.9,
+  "rho0.8" = Farrington_rho0.8,
+  "rho0.75"= Farrington_rho0.75,
+  "rhoNA"  = Farrington_rhoNA
+)
+
+# Keep only those that actually exist (are not NULL)
+models_list <- models_list[!vapply(models_list, is.null, logical(1))]
+
+# Base age levels from any one model (use rho1 as reference)
+age_levels <- names(Farrington_rho1$foi_MLE)
+
+# --- Build DF for all Farrington models
+models_df <- bind_rows(lapply(names(models_list), function(nm) {
+  farrington_to_df(models_list[[nm]], nm)
+}))
+
+# --- Add the TRUE FOI as a black bar (no CIs)
+true_df <- data.frame(
+  age   = age_levels,
+  model = "True",
+  foi   = as.numeric(true_foi_rho0.9),  # your true FOI vector
+  lower = NA_real_,
+  upper = NA_real_
+)
+
+plot_df <- bind_rows(true_df, models_df) %>%
+  mutate(
+    age   = factor(age, levels = age_levels),
+    model = factor(model, levels = c("True", names(models_list)))
+  )
+
+
+# ... build plot_df as before ...
+
+# Ensure consistent ordering (True first) and age levels fixed
+model_levels <- c("True","rho1","rho0.9","rho0.8","rho0.75","rhoNA")
+model_levels <- intersect(model_levels, unique(plot_df$model))  # only those present
+plot_df <- plot_df %>%
+  mutate(
+    age   = factor(age, levels = unique(age)),   # your chosen age order
+    model = factor(model, levels = model_levels)
+  ) %>%
+  arrange(age, model)
+
+# Single shared dodge for both layers
+pd <- position_dodge(width = 0.75)
+
+gg <- ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
+  geom_col(position = pd, width = 0.65, color = "black", linewidth = 0.2) +
+  # IMPORTANT: same data, same dodge, keep 'group = model', don't na.rm
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper, group = model),
+    position = pd, width = 0.18, linewidth = 0.3
+  ) +
+  scale_fill_manual(values = c(
+    "True"   = "black",
+  "rho1"   = "#08306B",
+  "rho0.9" = "#08519C",
+  "rho0.8" = "#2171B5",
+  "rho0.75"= "#4292C6",
+  "rhoNA"  = "#6BAED6"
+  )[levels(plot_df$model)]) +
+  labs(x = "Age", y = "Force of Infection (FOI)", fill = "Model") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+
+gg
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# --- Helper
+farrington_to_df <- function(obj, label) {
+  ages  <- names(obj$foi_MLE)
+  foi   <- vapply(obj$foi_MLE, `[`, numeric(1), 1)
+  lower <- vapply(obj$foi_CIs, function(x) unname(x["2.5%"]),  numeric(1))
+  upper <- vapply(obj$foi_CIs, function(x) unname(x["97.5%"]), numeric(1))
+  data.frame(age = ages, model = label, foi = foi, lower = lower, upper = upper, 
+             stringsAsFactors = FALSE)
+}
+
+# --- Collect models, EXCLUDING rhoNA
+models_list <- list(
+  "rho1"   = Farrington_rho1,
+  "rho0.9" = Farrington_rho0.9,
+  "rho0.8" = Farrington_rho0.8,
+  "rho0.75"= Farrington_rho0.75
+)
+models_list <- models_list[!vapply(models_list, is.null, logical(1))]
+
+# --- Ages and data
+age_levels <- names(Farrington_rho1$foi_MLE)
+
+models_df <- bind_rows(lapply(names(models_list), function(nm) {
+  farrington_to_df(models_list[[nm]], nm)
+}))
+
+true_df <- data.frame(
+  age   = age_levels,
+  model = "True",
+  foi   = as.numeric(true_foi_rho0.9),
+  lower = NA_real_,
+  upper = NA_real_
+)
+
+plot_df <- bind_rows(true_df, models_df) %>%
+  mutate(
+    age   = factor(age, levels = age_levels),
+    model = factor(model, levels = c("True", names(models_list)))
+  ) %>%
+  arrange(age, model)
+
+# --- Colors (no rhoNA)
+palette_used <- c(
+  "True"   = "black",
+  "rho1"   = "#004B8D",
+  "rho0.9" = "#0077CC",
+  "rho0.8" = "#33A1FD",
+  "rho0.75"= "#B3E5FF"
+)[levels(plot_df$model)]
+
+# --- Plot (shared dodge for bars & CIs)
+pd <- position_dodge(width = 0.75)
+
+ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
+  geom_col(position = pd, width = 0.65, color = "black", linewidth = 0.2) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper, group = model),
+    position = pd, width = 0.18, linewidth = 0.3
+  ) +
+  scale_fill_manual(values = palette_used, guide = guide_legend(title = "Model")) +
+  labs(x = "Age", y = "Force of Infection (FOI)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# --- Helper to tidy one Farrington fit into a data frame
+farrington_to_df <- function(obj, label) {
+  ages  <- names(obj$foi_MLE)
+  foi   <- vapply(obj$foi_MLE, `[`, numeric(1), 1)
+  lower <- vapply(obj$foi_CIs, function(x) unname(x["2.5%"]),  numeric(1))
+  upper <- vapply(obj$foi_CIs, function(x) unname(x["97.5%"]), numeric(1))
+  data.frame(age = ages, model = label, foi = foi, lower = lower, upper = upper, 
+             stringsAsFactors = FALSE)
+}
+
+# --- Collect models you have in your environment
+models_list <- list(
+  "rho0.9" = Farrington_rho0.9,
+  "rhoNA"  = Farrington_rhoNA
+)
+
+# Keep only those that actually exist (are not NULL)
+models_list <- models_list[!vapply(models_list, is.null, logical(1))]
+
+# Base age levels from any one model (use rho1 as reference)
+age_levels <- names(Farrington_rho1$foi_MLE)
+
+# --- Build DF for all Farrington models
+models_df <- bind_rows(lapply(names(models_list), function(nm) {
+  farrington_to_df(models_list[[nm]], nm)
+}))
+
+# --- Add the TRUE FOI as a black bar (no CIs)
+true_df <- data.frame(
+  age   = age_levels,
+  model = "True",
+  foi   = as.numeric(true_foi_rho0.9),  # your true FOI vector
+  lower = NA_real_,
+  upper = NA_real_
+)
+
+plot_df <- bind_rows(true_df, models_df) %>%
+  mutate(
+    age   = factor(age, levels = age_levels),
+    model = factor(model, levels = c("True", names(models_list)))
+  )
+
+
+# ... build plot_df as before ...
+
+# Ensure consistent ordering (True first) and age levels fixed
+model_levels <- c("True","rho1","rho0.9","rho0.8","rho0.75","rhoNA")
+model_levels <- intersect(model_levels, unique(plot_df$model))  # only those present
+plot_df <- plot_df %>%
+  mutate(
+    age   = factor(age, levels = unique(age)),   # your chosen age order
+    model = factor(model, levels = model_levels)
+  ) %>%
+  arrange(age, model)
+
+# Single shared dodge for both layers
+pd <- position_dodge(width = 0.75)
+# after you build plot_df, before gg:
+pretty_labels <- c(
+  "True"   = "Reference",
+  "rho0.9" = "\u03C1=0.9",
+  "rhoNA"  = "\u03C1=?"
+)
+
+gg <- ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
+  geom_col(position = pd, width = 0.65, color = "black", linewidth = 0.2) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper, group = model),
+    position = pd, width = 0.18, linewidth = 0.3
+  ) +
+  scale_fill_manual(
+    values = c(
+      "True"   = "grey70",
+      "rho0.9" = "#33A1FD",
+      "rhoNA"  = "skyblue"
+    )[levels(plot_df$model)],
+    labels = pretty_labels[levels(plot_df$model)]
+  ) +
+  labs(x = "Age", y = "FOI", fill = "Model") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+
+gg
+
+ggsave("rhoNA_plot.png", gg, width=7, height=4)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# --- Helper
+farrington_to_df <- function(obj, label) {
+  ages  <- names(obj$foi_MLE)
+  foi   <- vapply(obj$foi_MLE, `[`, numeric(1), 1)
+  lower <- vapply(obj$foi_CIs, function(x) unname(x["2.5%"]),  numeric(1))
+  upper <- vapply(obj$foi_CIs, function(x) unname(x["97.5%"]), numeric(1))
+  data.frame(age = ages, model = label, foi = foi, lower = lower, upper = upper, 
+             stringsAsFactors = FALSE)
+}
+
+# --- Collect models, EXCLUDING rhoNA
+models_list <- list(
+  "rho1"   = Farrington_rho1,
+  "rho0.9" = Farrington_rho0.9,
+  "rho0.8" = Farrington_rho0.8
+)
+models_list <- models_list[!vapply(models_list, is.null, logical(1))]
+
+# --- Ages and data
+age_levels <- names(Farrington_rho1$foi_MLE)
+
+models_df <- bind_rows(lapply(names(models_list), function(nm) {
+  farrington_to_df(models_list[[nm]], nm)
+}))
+
+true_df <- data.frame(
+  age   = age_levels,
+  model = "True",
+  foi   = as.numeric(true_foi_rho0.9),
+  lower = NA_real_,
+  upper = NA_real_
+)
+
+plot_df <- bind_rows(true_df, models_df) %>%
+  mutate(
+    age   = factor(age, levels = age_levels),
+    model = factor(model, levels = c("True", names(models_list)))
+  ) %>%
+  arrange(age, model)
+
+# --- Colors (no rhoNA)
+palette_used <- c(
+  "True"   = "grey70",
+  "rho1"   = "#004B8D",
+  "rho0.9" = "#33A1FD",
+  "rho0.8" = "#B3E5FF"
+)[levels(plot_df$model)]
+
+# --- Plot (shared dodge for bars & CIs)
+pd <- position_dodge(width = 0.75)
+
+# --- Pretty legend labels
+pretty_labels <- c(
+  "True"   = "Reference",
+  "rho1"   = "\u03C1=1",
+  "rho0.9" = "\u03C1=0.9",
+  "rho0.8" = "\u03C1=0.8"
+)
+
+gg <- ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
+  geom_col(position = pd, width = 0.65, color = "black", linewidth = 0.2) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper, group = model),
+    position = pd, width = 0.18, linewidth = 0.3
+  ) +
+  scale_fill_manual(
+    values = palette_used,
+    labels = pretty_labels[levels(plot_df$model)],
+    guide = guide_legend(title = "Model")
+  ) +
+  labs(x = "Age", y = "FOI") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+gg
+ggsave("varying_rho_plot.png", gg, width=7, height=4)
+
+```
+
+# Seroprevalence plots
+```{r}
+Observed_seroprev <- y_rho0.9/n_rho0.9
+Farrington1_seroprev <- Observed_seroprev
+Farrington0.9_seroprev <- Observed_seroprev/0.9
+Farrington0.8_seroprev <- Observed_seroprev/0.8
+Farrington0.75_seroprev <- Observed_seroprev/0.75
+
+# how much greater is the change in FOI when assay sensitivity is changed from 0.9 to 0.8 then when it is changed from 0.9 to 1
+
+change_0.9_to_1 <- abs(unlist(Farrington_rho0.9$foi_MLE)-unlist(Farrington_rho1$foi_MLE))
+change_0.9_to_0.8 <- abs(unlist(Farrington_rho0.9$foi_MLE) - unlist(Farrington_rho0.8$foi_MLE))
+change_0.9_to_0.8/change_0.9_to_1
+
+mean_change_0.9_to_1
+mean_change_0.9_to_0.8
+
+mean_change_0.9_to_0.8/mean_change_0.9_to_1
+
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# --- Build the age x-axis (midpoints if you have bin edges) ----------------
+get_age_x <- function(t_bins, n){
+  if (is.matrix(t_bins) && ncol(t_bins) == 2) {
+    rowMeans(t_bins)
+  } else if (is.data.frame(t_bins) && ncol(t_bins) >= 2) {
+    rowMeans(as.matrix(t_bins[,1:2]))
+  } else if (is.numeric(t_bins) && length(t_bins) == n + 1) {
+    (head(t_bins, -1) + tail(t_bins, -1)) / 2
+  } else if (is.numeric(t_bins) && length(t_bins) == n) {
+    as.numeric(t_bins)
+  } else {
+    seq_len(n)  # fallback: 1..n
+  }
+}
+
+n_bins <- length(Farrington1_seroprev)
+age_x  <- get_age_x(t_true_FOI, n_bins)
+
+# --- Assemble long data ----------------------------------------------------
+df <- tibble(
+  Age    = age_x,
+  rho1   = as.numeric(Farrington1_seroprev),
+  rho0.9 = as.numeric(Farrington0.9_seroprev),
+  rho0.8 = as.numeric(Farrington0.8_seroprev)
+) %>%
+  pivot_longer(cols = c(rho1, rho0.9, rho0.8),
+               names_to = "Model", values_to = "pi_hat") %>%
+  mutate(Model = factor(Model, levels = c("rho1","rho0.9","rho0.8")))
+
+# --- Colors (your palette) -------------------------------------------------
+cols <- c(
+  "rho1"   = "#004B8D",
+  "rho0.9" = "#33A1FD",
+  "rho0.8" = "#B3E5FF"
+)
+
+# Nice major breaks every 10 units across the observed range
+x_breaks <- seq(floor(min(df$Age, na.rm=TRUE)/10)*10,
+                ceiling(max(df$Age, na.rm=TRUE)/10)*10, by = 10)
+
+# --- Plot ------------------------------------------------------------------
+p <- ggplot(df, aes(x = Age, y = pi_hat, color = Model)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.8, alpha = 0.8) +
+  scale_color_manual(values = cols, labels = c("rho = 1.0","rho = 0.9","rho = 0.8")) +
+  labs(
+    x = "Age",
+    y = expression("Model-assumed proportion seropositive (" * pi(t) * ")"),
+    color = NULL
+  ) +
+  scale_x_continuous(breaks = x_breaks) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+p
+# ggsave("seroprev_lines.png", p, width = 9, height = 4, dpi = 300)
+
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# --- Helper
+farrington_to_df <- function(obj, label) {
+  ages  <- names(obj$foi_MLE)
+  foi   <- vapply(obj$foi_MLE, `[`, numeric(1), 1)
+  lower <- vapply(obj$foi_CIs, function(x) unname(x["2.5%"]),  numeric(1))
+  upper <- vapply(obj$foi_CIs, function(x) unname(x["97.5%"]), numeric(1))
+  data.frame(age = ages, model = label, foi = foi, lower = lower, upper = upper, 
+             stringsAsFactors = FALSE)
+}
+
+# --- Collect models, EXCLUDING rhoNA
+models_list <- list(
+  "rho0.9" = Farrington_rho0.9,
+  "rho0.75"= Farrington_rho0.75
+)
+models_list <- models_list[!vapply(models_list, is.null, logical(1))]
+
+# --- Ages and data
+age_levels <- names(Farrington_rho1$foi_MLE)
+
+models_df <- bind_rows(lapply(names(models_list), function(nm) {
+  farrington_to_df(models_list[[nm]], nm)
+}))
+
+true_df <- data.frame(
+  age   = age_levels,
+  model = "True",
+  foi   = as.numeric(true_foi_rho0.9),
+  lower = NA_real_,
+  upper = NA_real_
+)
+
+plot_df <- bind_rows(true_df, models_df) %>%
+  mutate(
+    age   = factor(age, levels = age_levels),
+    model = factor(model, levels = c("True", names(models_list)))
+  ) %>%
+  arrange(age, model)
+
+# --- Colors (no rhoNA)
+palette_used <- c(
+  "True"   = "grey70",
+  "rho0.9" = "#33A1FD",
+  "rho0.75"= "lightblue"
+)[levels(plot_df$model)]
+
+# --- Plot (shared dodge for bars & CIs)
+pd <- position_dodge(width = 0.75)
+
+# --- Pretty legend labels
+pretty_labels <- c(
+  "True"    = "Reference",
+  "rho0.9"  = "\u03C1=0.9",
+  "rho0.75" = "\u03C1=0.75"
+)
+
+gg <- ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
+  geom_col(position = pd, width = 0.65, color = "black", linewidth = 0.2) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper, group = model),
+    position = pd, width = 0.18, linewidth = 0.3
+  ) +
+  scale_fill_manual(
+    values = palette_used,
+    labels = pretty_labels[levels(plot_df$model)],
+    guide = guide_legend(title = "Model")
+  ) +
+  labs(x = "Age", y = "FOI") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+gg
+ggsave("rho0.75_plot.png", gg, width=7, height=4)
+
+```
+
+```{r}
+# Packages
+library(tidyverse)
+
+# Given
+Observed_seroprev       <- y_rho0.9 / n_rho0.9
+Farrington0.9_seroprev  <- Observed_seroprev / 0.9
+Farrington0.75_seroprev <- pmin(1, Observed_seroprev / 0.75)
+
+# X-axis (age); fall back to row index if not available
+age_vec <- if (exists("t")) t else if (exists("age")) age else seq_along(Observed_seroprev)
+# Age groups: [a, b)
+age_lower <- t_rho0.9[, 1]
+age_upper <- t_rho0.9[, 2]
+stopifnot(length(age_lower) == length(Observed_seroprev))
+
+age_group <- paste0("[", age_lower, ",", age_upper, ")")
+
+seroprev_tbl <- tibble(
+  age_group,
+  Observed_seroprev       = Observed_seroprev,
+  Farrington_rho0_9       = Farrington0.9_seroprev,
+  Farrington_rho0_75_cap1 = Farrington0.75_seroprev
+)
+
+# Optional: rounded for display
+seroprev_tbl_rounded <- seroprev_tbl %>%
+  mutate(across(c(Observed_seroprev, Farrington_rho0_9, Farrington_rho0_75_cap1), ~ round(.x, 3)))
+
+seroprev_tbl_rounded
+
+
+# Assemble data (optionally include a 'True' curve if pi_true exists)
+df <- tibble(
+  age      = t_mid_rho0.9,
+  `rho0.9` = Farrington0.9_seroprev,
+  `rho0.75`= Farrington0.75_seroprev
+)
+if (exists("pi_true")) df$True <- Observed_seroprev
+
+# Long format
+df_long <- df %>%
+  pivot_longer(-age, names_to = "curve", values_to = "seroprev") %>%
+  mutate(curve = factor(curve, levels = c("True", "rho0.9", "rho0.75")))
+
+# Your palette
+palette_used <- c(
+  "True"   = "grey70",
+  "rho0.9" = "#33A1FD",
+  "rho0.75"= "lightblue"
+)
+
+# Only use colors for curves that are present (avoids warnings if 'True' is absent)
+present_levels <- intersect(names(palette_used), levels(df_long$curve)[levels(df_long$curve) %in% unique(df_long$curve)])
+
+# Plot: dots with thin connecting lines
+p <- ggplot(df_long, aes(x = age, y = seroprev, color = curve, group = curve)) +
+  geom_line(size = 0.3) +
+  geom_point(size = 1.6, stroke = 0) +
+  scale_color_manual(values = palette_used[present_levels], breaks = present_levels) +
+  scale_y_continuous(limits = c(0, 1), expand = expansion(mult = c(0.01, 0.02))) +
+  labs(x = "Age (t)", y = "Seroprevalence", color = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top", legend.direction = "horizontal")
+
+p
+
+```
+
+
+
+## How precisely does one need to know waning rates?
+
+-   3 scenarios: lifelong immunity, 10 year waning rate, 15 year waning rate o For each: fit splines (w=0, w=10, w=15) and Farrington (w=0, w=10, w=15)
+
+```{r}
+# ----------------------------------- lifelong immunity -------------------------------------
+t_w0 <- no.waning.sample$t.sim
+y_w0 <- no.waning.sample$y.sims
+n_w0 <- no.waning.sample$n.sim
+true_foi_w0 <- no.waning.sample$dCFOI
+t_mid_w0 <- (t_w0[,1] + t_w0[,2]) /2
+
+Splines_w0_truew0 <- FoiFromCatalyticModel_unparallelised(t_w0, y_w0, n_w0, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=1)
+saveRDS(Splines_w0_truew0, "Splines_w0_truew0.rds")
+
+Splines_w10_truew0 <- FoiFromCatalyticModel_unparallelised(t_w0, y_w0, n_w0, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/10), boot_num=1)
+saveRDS(Splines_w10_truew0, "Splines_w10_truew0.rds")
+
+Splines_w15_truew0 <- FoiFromCatalyticModel_unparallelised(t_w0, y_w0, n_w0, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15), boot_num=1)
+saveRDS(Splines_w15_truew0, "Splines_w15_truew0.rds")
+
+Farrington_w0_truew0 <- FoiFromCatalyticModel(t_w0, y_w0, n_w0, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), boot_num=2)
+saveRDS(Farrington_w0_truew0, "Farrington_w0_truew0.rds")
+
+Farrington_w10_truew0 <- FoiFromCatalyticModel(t_w0, y_w0, n_w0, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/10), boot_num=2)
+saveRDS(Farrington_w10_truew0, "Farrington_w10_truew0.rds")
+
+Farrington_w15_truew0 <- FoiFromCatalyticModel(t_w0, y_w0, n_w0, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2)
+saveRDS(Farrington_w15_truew0, "Farrington_w15_truew0.rds")
+
+# ---------------------------------- 10 year waning rate ---------------------------------
+t_w10 <- waning.sample.10yrs$t.sim
+y_w10 <- waning.sample.10yrs$y.sims
+n_w10 <- waning.sample.10yrs$n.sim
+true_foi_w10 <- waning.sample.10yrs$dCFOI
+t_mid_w10 <- (t_w10[,1] + t_w10[,2]) /2
+
+Splines_w0_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=1)
+saveRDS(Splines_w0_truew10, "Splines_w0_truew10.rds")
+
+Splines_w10_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/10), boot_num=1)
+saveRDS(Splines_w10_truew10, "Splines_w10_truew10.rds")
+
+Splines_w15_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15), boot_num=1)
+saveRDS(Splines_w15_truew10, "Splines_w15_truew10.rds")
+
+Farrington_w0_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), boot_num=2)
+saveRDS(Farrington_w0_truew10, "Farrington_w0_truew10.rds")
+
+Farrington_w10_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/10), boot_num=2)
+saveRDS(Farrington_w10_truew10, "Farrington_w10_truew10.rds")
+
+Farrington_w15_truew10 <- FoiFromCatalyticModel(t_w10, y_w10, n_w10, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2)
+saveRDS(Farrington_w15_truew10, "Farrington_w15_truew10.rds")
+
+# ------------------------------------------------------ 15 year waning rate ----------------------------------------
+
+t_w15 <- waning.sample.15yrs$t.sim
+y_w15 <- waning.sample.15yrs$y.sims
+n_w15 <- waning.sample.15yrs$n.sim
+true_foi_w15 <- waning.sample.15yrs$dCFOI
+t_mid_w15 <- (t_w15[,1] + t_w15[,2]) /2
+
+Splines_w0_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=1)
+saveRDS(Splines_w0_truew15, "Splines_w0_truew15.rds")
+
+Splines_w10_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/10), boot_num=1)
+saveRDS(Splines_w10_truew15, "Splines_w10_truew15.rds")
+
+Splines_w15_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15), boot_num=1)
+saveRDS(Splines_w15_truew15, "Splines_w15_truew15.rds")
+
+Farrington_w0_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "SimpleCatalytic", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), boot_num=2)
+saveRDS(Farrington_w0_truew15, "Farrington_w0_truew15.rds")
+
+Farrington_w10_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/10), boot_num=2)
+saveRDS(Farrington_w10_truew15, "Farrington_w10_truew15.rds")
+
+Farrington_w15_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2)
+saveRDS(Farrington_w15_truew15, "Farrington_w15_truew15.rds")
+
+```
+
+```{r}
+Splines_w0_truew0 <- readRDS("Splines_w0_truew0.rds")
+Splines_w10_truew0 <- readRDS("Splines_w10_truew0.rds")
+Splines_w15_truew0 <- readRDS("Splines_w15_truew0.rds")
+Farrington_w0_truew0 <- readRDS("Farrington_w0_truew0.rds")
+Farrington_w10_truew0 <- readRDS("Farrington_w10_truew0.rds")
+Farrington_w15_truew0 <- readRDS("Farrington_w15_truew0.rds")
+
+Splines_w0_truew10 <- readRDS("Splines_w0_truew10.rds")
+Splines_w10_truew10 <- readRDS("Splines_w10_truew10.rds")
+Splines_w15_truew10 <- readRDS("Splines_w15_truew10.rds")
+Farrington_w0_truew10 <- readRDS("Farrington_w0_truew10.rds")
+Farrington_w10_truew10 <- readRDS("Farrington_w10_truew10.rds")
+Farrington_w15_truew10 <- readRDS("Farrington_w15_truew10.rds")
+
+Splines_w0_truew15 <- readRDS("Splines_w0_truew15.rds")
+Splines_w10_truew15 <- readRDS("Splines_w10_truew15.rds")
+Splines_w15_truew15 <- readRDS("Splines_w15_truew15.rds")
+Farrington_w0_truew15 <- readRDS("Farrington_w0_truew15.rds")
+Farrington_w10_truew15 <- readRDS("Farrington_w10_truew15.rds")
+Farrington_w15_truew15 <- readRDS("Farrington_w15_truew15.rds")
+
+
+library(patchwork)
+
+w0_plot_splines <- plot_foi_grid(list("ω = 0"=Splines_w0_truew0,"ω = 1/15"=Splines_w15_truew0, "ω = 1/10"=Splines_w10_truew0), from=0, to=60, true_foi = list(t=t_mid_w0, foi=true_foi_w0), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w0_plot_farringtons <- plot_foi_grid(list("ω = 0"=Farrington_w0_truew0, "ω = 1/15"=Farrington_w15_truew0, "ω = 1/10"=Farrington_w10_truew0), from=0, to=60, true_foi = list(t=t_mid_w0, foi=true_foi_w0), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w10_plot_splines <- plot_foi_grid(list("ω = 0"=Splines_w0_truew10,"ω = 1/15"=Splines_w15_truew10, "ω = 1/10"=Splines_w10_truew10), from=0, to=60, true_foi = list(t=t_mid_w10, foi=true_foi_w10), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w10_plot_farringtons <- plot_foi_grid(list("ω = 0"=Farrington_w0_truew10, "ω = 1/15"=Farrington_w15_truew10, "ω = 1/10"=Farrington_w10_truew10), from=0, to=60, true_foi = list(t=t_mid_w10, foi=true_foi_w10), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w15_plot_splines <- plot_foi_grid(list("ω = 0"=Splines_w0_truew15, "ω = 1/15"=Splines_w15_truew15, "ω = 1/10"=Splines_w10_truew15), from=0, to=60, true_foi = list(t=t_mid_w15, foi=true_foi_w15), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w15_plot_farringtons <- plot_foi_grid(list("ω = 0"=Farrington_w0_truew15, "ω = 1/15"=Farrington_w15_truew15, "ω = 1/10"=Farrington_w10_truew15), from=0, to=60, true_foi = list(t=t_mid_w15, foi=true_foi_w15), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+
+
+combined_foi_plots <-
+  (w0_plot_splines  | w0_plot_farringtons)  /
+  (w15_plot_splines | w15_plot_farringtons) /
+  (w10_plot_splines | w10_plot_farringtons) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+combined_foi_plots
+
+ggsave("waning_plot.png", combined_foi_plots,
+       width = 6, height = 8, dpi = 300)   # ↑ bump height
+
+
+combined_foi_plots_v2 <-
+  (w0_plot_splines  | w15_plot_splines | w10_plot_splines)  /
+  (w0_plot_farringtons | w15_plot_farringtons | w10_plot_farringtons) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+combined_foi_plots_v2
+
+ggsave("waning_plot_v2.png", combined_foi_plots_v2,
+       width = 9, height = 5, dpi = 300)
+
+```
+
+```{r}
+plot_foi_grid_binned_true
+
+library(patchwork)
+
+w0_plot_splines <- plot_foi_grid_binned_true(list("ω = 0"=Splines_w0_truew0,"ω = 1/15"=Splines_w15_truew0, "ω = 1/10"=Splines_w10_truew0), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w0), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w0_plot_farringtons <- plot_foi_grid_binned_true(list("ω = 0"=Farrington_w0_truew0, "ω = 1/15"=Farrington_w15_truew0, "ω = 1/10"=Farrington_w10_truew0), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w0), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w10_plot_splines <- plot_foi_grid_binned_true(list("ω = 0"=Splines_w0_truew10,"ω = 1/15"=Splines_w15_truew10, "ω = 1/10"=Splines_w10_truew10), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w10), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w10_plot_farringtons <- plot_foi_grid_binned_true(list("ω = 0"=Farrington_w0_truew10, "ω = 1/15"=Farrington_w15_truew10, "ω = 1/10"=Farrington_w10_truew10), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w10), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w15_plot_splines <- plot_foi_grid_binned_true(list("ω = 0"=Splines_w0_truew15, "ω = 1/15"=Splines_w15_truew15, "ω = 1/10"=Splines_w10_truew15), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w15), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+w15_plot_farringtons <- plot_foi_grid_binned_true(list("ω = 0"=Farrington_w0_truew15, "ω = 1/15"=Farrington_w15_truew15, "ω = 1/10"=Farrington_w10_truew15), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w15), xmin=0, xmax=60, ymin=0, ymax=0.4)
+
+
+
+
+combined_foi_plots_v2 <-
+  (w0_plot_splines  | w15_plot_splines | w10_plot_splines)  /
+  (w0_plot_farringtons | w15_plot_farringtons | w10_plot_farringtons) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+combined_foi_plots_v2
+
+ggsave("waning_plot_v2.png", combined_foi_plots_v2,
+       width = 9, height = 5, dpi = 300)
+```
+```{r}
+# Splines — dark→light GREEN (ColorBrewer "Greens"-style)
+my_cols_splines <- c(
+  "ω = 1/10"   = "#00441B",  # very dark green
+  "ω = 1/15"= "#1B7837",  # medium green
+  "ω = 0"= "#74C476"   # light green
+)
+
+# Farrington — dark→light BLUE (ColorBrewer "Blues"-style)
+my_cols_farrington <- c(
+  "ω = 1/10"   = "#08306B",  # very dark blue
+  "ω = 1/15"= "#2171B5",  # medium blue
+  "ω = 0"= "#6BAED6"   # light blue
+)
+
+
+w0_plot_splines <- plot_foi_grid_binned_true_colours(list("ω = 0"=Splines_w0_truew0,"ω = 1/15"=Splines_w15_truew0, "ω = 1/10"=Splines_w10_truew0), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w0), xmin=0, xmax=60, line_colors = my_cols_splines, ymin=0, ymax=0.4)
+
+w0_plot_farringtons <- plot_foi_grid_binned_true_colours(list("ω = 0"=Farrington_w0_truew0, "ω = 1/15"=Farrington_w15_truew0, "ω = 1/10"=Farrington_w10_truew0), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w0), xmin=0, xmax=60,line_colors = my_cols_farrington, ymin=0, ymax=0.4)
+
+w10_plot_splines <- plot_foi_grid_binned_true_colours(list("ω = 0"=Splines_w0_truew10,"ω = 1/15"=Splines_w15_truew10, "ω = 1/10"=Splines_w10_truew10), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w10), xmin=0, xmax=60,line_colors = my_cols_splines, ymin=0, ymax=0.4)
+
+w10_plot_farringtons <- plot_foi_grid_binned_true_colours(list("ω = 0"=Farrington_w0_truew10, "ω = 1/15"=Farrington_w15_truew10, "ω = 1/10"=Farrington_w10_truew10), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w10), xmin=0, xmax=60, line_colors = my_cols_farrington, ymin=0, ymax=0.4)
+
+w15_plot_splines <- plot_foi_grid_binned_true_colours(list("ω = 0"=Splines_w0_truew15, "ω = 1/15"=Splines_w15_truew15, "ω = 1/10"=Splines_w10_truew15), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w15), xmin=0, xmax=60, line_colors = my_cols_splines,ymin=0, ymax=0.4)
+
+w15_plot_farringtons <- plot_foi_grid_binned_true_colours(list("ω = 0"=Farrington_w0_truew15, "ω = 1/15"=Farrington_w15_truew15, "ω = 1/10"=Farrington_w10_truew15), from=0, to=60, true_foi = list(t=t_w15, foi=true_foi_w15), xmin=0, xmax=60,line_colors = my_cols_farrington, ymin=0, ymax=0.4)
+
+
+
+combined_foi_plots_v2 <-
+  (w0_plot_splines  | w15_plot_splines | w10_plot_splines)  /
+  (w0_plot_farringtons | w15_plot_farringtons | w10_plot_farringtons) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+combined_foi_plots_v2
+
+ggsave("waning_plot_v2.png", combined_foi_plots_v2,
+       width = 9, height = 5, dpi = 300)
+
+w0_plot_splines_t  <- w0_plot_splines  + ggtitle("a) Simulated Lifelong Immunity (ω = 0)")
+w15_plot_splines_t <- w15_plot_splines + ggtitle("b) Simulated ω = 1/15")
+w10_plot_splines_t <- w10_plot_splines + ggtitle("c) Simulated ω = 1/10")
+
+row_splines <-
+  ((w0_plot_splines_t | w15_plot_splines_t | w10_plot_splines_t) +
+    plot_layout(guides = "collect")) &
+  guides(color = guide_legend(title = "Splines")) &
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 10)  # <— smaller titles
+  )
+
+# Row 2: Farringtons — collect row legend + set title
+row_farringtons <-
+  (w0_plot_farringtons | w15_plot_farringtons | w10_plot_farringtons) +
+  plot_layout(guides = "collect") &
+  guides(color = guide_legend(title = "Exp. Damp.")) &
+  theme(legend.position = "right")
+
+# Stack rows
+combined_foi_plots_v4 <- row_splines / row_farringtons
+combined_foi_plots_v4
+
+ggsave("waning_plots.png", combined_foi_plots_v4, width=7.5, height=4)
+```
+
+### AIC values for waning plots
+```{r}
+# for simulated ground truth omega = 0
+AIC_Farrington_w0_truew0 <- Farrington_w0_truew0$AIC
+AIC_Farrington_w10_truew0 <- Farrington_w10_truew0$AIC
+AIC_Farrington_w15_truew0 <- Farrington_w15_truew0$AIC
+
+# for simulated ground truth omega = 10
+AIC_Farrington_w0_truew10 <- Farrington_w0_truew10$AIC
+AIC_Farrington_w10_truew10 <- Farrington_w10_truew10$AIC
+AIC_Farrington_w15_truew10 <- Farrington_w15_truew10$AIC
+
+# for simulated ground truth omega = 15
+AIC_Farrington_w0_truew15 <- Farrington_w0_truew15$AIC
+AIC_Farrington_w10_truew15 <- Farrington_w10_truew15$AIC
+AIC_Farrington_w15_truew15 <- Farrington_w15_truew15$AIC
+
+library(tibble)
+library(dplyr)
+library(knitr)
+
+aic_tbl <- tibble(
+  `Assumed ω`  = c(0, 10, 15),
+  `True ω = 0`  = c(AIC_Farrington_w0_truew0,  AIC_Farrington_w10_truew0,  AIC_Farrington_w15_truew0),
+  `True ω = 10` = c(AIC_Farrington_w0_truew10, AIC_Farrington_w10_truew10, AIC_Farrington_w15_truew10),
+  `True ω = 15` = c(AIC_Farrington_w0_truew15, AIC_Farrington_w10_truew15, AIC_Farrington_w15_truew15)
+) %>%
+  mutate(across(-`Assumed ω`, ~ round(.x, 2)))
+
+aic_tbl
+
+# LaTeX (Quarto/knitr)
+kable(
+  aic_tbl, booktabs = TRUE,
+  caption = "AIC for exponentially damped FOI: rows are model-assumed ω; columns are simulated true ω."
+)
+```
+
+## Can a catalytic model be used to estimate waning rate?
+
+-   Hypothesis: It will be effective as long as foi functional form is accurate. Under thus hypothesis – for the UK heterogeneous mixing Farrington should be able to estimate waning rate well. For homogeneous mixing, linear should be best)
+-   Simulate homogeneous and heterogeneous population: Fit waning immunity catalytic model (with constant, Farrington foi form) and set w=NA and see whether the w estimate is accurate/whether the CI captures the true value
+
+```{r}
+# 15 year case - heterogeneous mixing
+t_w15 <- waning.sample.15yrs$t.sim
+y_w15 <- waning.sample.15yrs$y.sims
+n_w15 <- waning.sample.15yrs$n.sim
+true_foi_w15 <- waning.sample.15yrs$dCFOI
+t_mid_w15 <- (t_w15[,1] + t_w15[,2]) /2
+
+Farrington_wNA_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203, w=1/15), lower=c(0,0,0,1/100), upper=c(1,1,1,1), model_fixed_params = list(w=NA), boot_num=2)
+
+Muench_wNA_truew15 <- FoiFromCatalyticModel(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", par_init = c(foi=0.203, w=1/15), lower=c(0), upper=c(8), model_fixed_params = list(w=NA), boot_num=2)
+
+# Farrington_w15_truew15 <- FoiFromCatalyticModel_unparallelised(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2) # repeated earlier
+
+# Muench_w15_truew15 <- FoiFromCatalyticModel_unparallelised(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=1/15), boot_num=2)
+
+# Splines_w15_truew15 <- FoiFromCatalyticModel_unparallelised(t_w15, y_w15, n_w15, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15)) # repeated earlier
+
+# plot_foi_grid(list(Farrington_wNA=Farrington_wNA_truew15, Farrington_w15=Farrington_w15, Splines_w15=Splines_w15, Muench_wNA=Muench_wNA_truew15, Muench_w15=Muench_w15), from=0, to=60, true_foi = list(t=t_mid_w15, foi=true_foi_w15))
+
+
+# 2 year case - heterogeneous mixing
+t_w2 <- waning.sample.2yrs$t.sim
+y_w2 <- waning.sample.2yrs$y.sims
+n_w2 <- waning.sample.2yrs$n.sim
+true_foi_w2 <- waning.sample.2yrs$foi.sim
+t_mid_w2 <- t_w2[,1] + t_w2[,2] /2
+
+Farrington_wNA_truew2 <- FoiFromCatalyticModel_unparallelised(t_w2, y_w2, n_w2, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203, w=1/15), lower=c(0,0,0,1/100), upper=c(1,1,1,1), model_fixed_params = list(w=NA), boot_num=2)
+
+Muench_wNA_truew2 <- FoiFromCatalyticModel_unparallelised(t_w2, y_w2, n_w2, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=NA))
+
+Farrington_w2 <- FoiFromCatalyticModel_unparallelised(t_w2, y_w2, n_w2, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/2), boot_num = 2)
+
+Muench_w2 <- FoiFromCatalyticModel_unparallelised(t_w2, y_w2, n_w2, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=1/2))
+
+Splines_w2 <- FoiFromCatalyticModel_unparallelised(t_w2, y_w2, n_w2, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/2))
+
+plot_foi_grid(list(Farrington_wNA=Farrington_wNA_truew2, Farrington_w2=Farrington_w2, Splines_w2=Splines_w2, Muench_wNA=Muench_wNA_truew2, Muench_w2=Muench_w2), from=0, to=60, true_foi = list(t=t_mid_w2, foi=true_foi_w2))
+
+# 15 year case - homogeneous mixing
+t_w15_homo <- homo.waning.sample$t.sim
+y_w15_homo <- homo.waning.sample$y.sims
+n_w15_homo <- homo.waning.sample$n.sim
+true_foi_w15_homo <- homo.waning.sample$foi.sim
+t_mid_w15_homo <- t_w15_homo[,1] + t_w15_homo[,2] /2
+
+Farrington_wNA_truew15_homo <- FoiFromCatalyticModel_unparallelised(t_w15_homo, y_w15_homo, n_w15_homo, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203, w=1/15), lower=c(0,0,0,1/100), upper=c(1,1,1,1), model_fixed_params = list(w=NA))
+
+Muench_wNA_truew15_homo <- FoiFromCatalyticModel_unparallelised(t_w15_homo, y_w15_homo, n_w15_homo, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", par_init=c(foi=0.2, w=1/15), lower=c(0,0), upper=c(8,1), model_fixed_params = list(w=NA), boot_num=5)
+# ran 5 boot samples
+# MLE for w = 0.13 ~ 7.7 years 
+# CI for w = (0.11,0.14) ~ (7.1, 9.1) years
+
+Farrington_w15_homo <- FoiFromCatalyticModel_unparallelised(t_w15_homo, y_w15_homo, n_w15_homo, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2)
+
+Muench_w15_homo <- FoiFromCatalyticModel_unparallelised(t_w15_homo, y_w15_homo, n_w15_homo, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=1/15))
+
+Splines_w15_homo <- FoiFromCatalyticModel_unparallelised(t_w15_homo, y_w15_homo, n_w15_homo, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15))
+
+plot_foi_grid(list(Farrington_wNA=Farrington_wNA_truew15_homo, Farrington_w15=Farrington_w15_homo, Splines_w15=Splines_w15_homo, Muench_wNA=Muench_wNA_truew15_homo, Muench_w15=Muench_w15_homo), from=0, to=60, true_foi = list(t=t_mid_w15, foi=true_foi_w15))
+```
+
+```{r}
+waning.sample.15yrs.inclIR
+
+t <- waning.sample.15yrs.inclIR$t.sim
+y <- waning.sample.15yrs.inclIR$y.sims
+n <- waning.sample.15yrs.inclIR$n.sim
+true_foi <- waning.sample.15yrs.inclIR$foi.sim
+t_mid <- t[,1] + t[,2] /2
+
+Farrington_wNA.inclIR <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203, w=1/15), lower=c(0,0,0,1/100), upper=c(1,1,1,1), model_fixed_params = list(w=NA), boot_num = 2)
+
+Muench_wNA.inclIR <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=1/15))
+
+Farrington_w15.inclIR <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form="Farringtons", par_init = c(gamma0=0.0559, gamma1=0.0164, gamma2=0.203), lower=c(0,0,0), upper=c(1,1,1), model_fixed_params = list(w=1/15), boot_num = 2)
+
+Muench_w15.inclIR <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form="Constant", lower=c(0), upper=c(8), model_fixed_params = list(w=1/15))
+
+Splines_w15.inclIR <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15))
+
+plot_foi_grid(list(Far_wNA=Farrington_wNA, far_w15=Farrington_w15, spline_w15=Splines_w15, spline_w15.inclIR=Splines_w15.inclIR), from=0, to=60, true_foi = list(t=t_mid, foi=true_foi))
+```
+
+# 15 year waning: Comparing seroprev data obtained from R, IR, and EIR
+
+```{r}
+waning.sample.15yrs.Nat <- readRDS("SimulatedData_Samples/waning.sample.15yrs.rds")
+waning.sample.15yrs.R <- readRDS("SimulatedData_Samples/waning.sample.15yrs_inclR.rds")
+waning.sample.15yrs.IR <- readRDS("SimulatedData_Samples/waning.sample.15yrs_inclIR.rds")
+waning.sample.15yrs.EIR <- readRDS("SimulatedData_Samples/waning.sample.15yrs_inclEIR.rds")
+
+t(waning.sample.15yrs.Nat$y.sim)
+t(waning.sample.15yrs.R$y.sim)
+t(waning.sample.15yrs.IR$y.sim)
+t(waning.sample.15yrs.EIR$y.sim)
+
+t <- waning.sample.15yrs.R$t.sim
+n <- waning.sample.15yrs.R$n.sim
+
+Splines_w15.R <- FoiFromCatalyticModel_unparallelised(t, waning.sample.15yrs.R$y.sim, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15))
+
+Splines_w15.R <- FoiFromCatalyticModel_unparallelised(t, waning.sample.15yrs.IR$y.sim, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15))
+
+Splines_w15.R <- FoiFromCatalyticModel_unparallelised(t, waning.sample.15yrs.EIR$y.sim, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", model_fixed_params = list(w=1/15))
+```
+
+# Lifelong Immunity: Comparing seroprev data obtained from R, IR, and EIR
+
+```{r}
+no.waning.sample.Nat <- readRDS("SimulatedData_Samples/no.waning.sample.rds")
+no.waning.sample.R <- readRDS("SimulatedData_Samples/no.waning.sample_inclR.rds")
+no.waning.sample.IR <- readRDS("SimulatedData_Samples/no.waning.sample_inclIR.rds")
+no.waning.sample.EIR <- readRDS("SimulatedData_Samples/no.waning.sample_inclEIR.rds")
+
+t(no.waning.sample.Nat$y.sim)
+t(no.waning.sample.R$y.sim)
+t(no.waning.sample.IR$y.sim)
+t(no.waning.sample.EIR$y.sim)
+```
+
+# mean simulation plots
+```{r}
+Constant_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_RestrictedCatalytic_Constant_2025-09-29_15-23-01.rds")
+Constant_mods <- lapply(Constant_mods, function(m) {
+  f_old <- m$foi_t
+  m$foi_t <- function(t, par) {
+    y <- f_old(t, par)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t)) else as.numeric(y)
+  }
+  m
+})
+Linear_mods <- readRDS("Finished Model Runs (1000 population samples)/corrected_SimpleCatalytic_NegativeCorrected_Linear.rds")
+Linear_mods <- Linear_mods[-368]
+Exp_Damp_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_2025-09-29_17-20-13_fixed.rds")
+Exp_Damp_mods_rhoNA <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_RhoNA2025-09-30_14-04-40_fixed.rds")
+Piecewise_const <- readRDS("Finished Model Runs (1000 population samples)/SimpleCatalytic_PiecewiseConstant.rds")
+Spline_lifelong <- readRDS("Finished Model Runs (1000 population samples)/pop1_SimpleCatalytic_Splines_2025-09-30_16-55-03.rds")
+Spline_waning <- readRDS("Finished Model Runs (1000 population samples)/pop1_WaningImmunity_Splines_15_2025-09-30_17-07-35.rds")
+
+true_FOI <- no.waning.sample$dCFOI
+t_true_FOI <- no.waning.sample$t.sim
+# Constant_mods is now a list of models (1000 models). Each model is itself a list that contains params_MLE
+# each model also contains a function called foi_t(t, par)
+# generate a t from 0 to 60 (maybe 200)
+# params_MLE is a named list. It must be converted to a named vector (with same names... just unlist)
+# once params_MLE is a vector, it can be used as the par parameter
+# compile the foi(t, par) results into a matrix (each row is a new models results and the columns are the foi for each t)
+# find the mean foi for each t (colmeans) and call that vector mean_foi
+
+# repeat this process for all of the models. Put them all onto the same plot. Make the constant red, the linear orange, the exponentially damped linear blue, the piecewise constant purple
+# x axis is Age, y axis is Force of Infection
+# please behind the pots put the true_foi as a histogram (t is the widths of the histogram elements where each row is an age group [a, b)). Please make it light grey (grey 80)
+
+## ---- Helpers -------------------------------------------------------------
+
+library(ggplot2)
+
+# 1) Grid and robust helpers ------------------------------------------------
+t_grid <- seq(0, 60, length.out = 400)
+
+predict_one <- function(m, t_grid) {
+  # Returns a numeric vector of length(t_grid), even if foi_t returns a scalar
+  tryCatch({
+    par <- unlist(m$params_MLE, use.names = TRUE)
+    y   <- m$foi_t(t_grid, par)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t_grid)) else as.numeric(y)
+  }, error = function(e) rep(NA_real_, length(t_grid)))
+}
+
+mean_foi_curve <- function(mods, t_grid) {
+  mats <- vapply(mods, predict_one, FUN.VALUE = numeric(length(t_grid)), t_grid = t_grid)
+  rowMeans(mats, na.rm = TRUE)
+}
+
+get_true_bins <- function(t_bins, y_vals) {
+  if (is.matrix(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[,1], right = t_bins[,2])
+  else if (is.data.frame(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[[1]], right = t_bins[[2]])
+  else if (is.numeric(t_bins) && length(t_bins) == length(y_vals) + 1)
+    list(left = head(t_bins, -1), right = tail(t_bins, -1))
+  else
+    stop("t_true_FOI must be Nx2 bands or a vector of N+1 edges.")
+}
+
+# 2) Model averages (drop the bad linear #368 if present) -------------------
+
+mean_const  <- mean_foi_curve(Constant_mods,      t_grid)
+mean_linear <- mean_foi_curve(Linear_mods,  t_grid)
+mean_exp    <- mean_foi_curve(Exp_Damp_mods,      t_grid)
+mean_exp_rhoNA    <- mean_foi_curve(Exp_Damp_mods_rhoNA,      t_grid)
+mean_piece  <- mean_foi_curve(Piecewise_const,    t_grid)
+
+# 3) True FOI background rectangles ----------------------------------------
+bins   <- get_true_bins(t_true_FOI, true_FOI)
+df_true <- data.frame(
+  xmin = bins$left,
+  xmax = bins$right,
+  ymin = 0,
+  ymax = as.numeric(true_FOI)
+)
+
+# 4) Tidy data for lines ----------------------------------------------------
+df_lines <- rbind(
+  data.frame(age = t_grid, foi = mean_const,  model = "Constant"),
+  data.frame(age = t_grid, foi = mean_linear, model = "Linear"),
+  data.frame(age = t_grid, foi = mean_exp,    model = "Exp. damped linear"),
+  data.frame(age = t_grid, foi = mean_piece,  model = "Piecewise constant")
+)
+df_lines$model <- factor(
+  df_lines$model,
+  levels = c("Constant","Linear","Exp. damped linear","Piecewise constant")
+)
+
+cols <- c(
+  "Constant"            = "#CC6A6E",  
+  "Linear"              = "#D08C60",  
+  "Exp. damped linear"  = "#5B84B1",  
+  "Piecewise constant"  = "#8A67C6"   
+)
+
+
+
+
+ymax <- max(c(df_true$ymax, df_lines$foi), na.rm = TRUE) * 1.05
+
+# 5) Plot -------------------------------------------------------------------
+# Keep the underlying levels
+model_levels <- c("Constant","Linear","Exp. damped linear","Piecewise constant")
+
+p <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_line(
+    data = df_lines,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols,
+    breaks = model_levels,
+    labels = c("Constant","Linear","Exp. Damp.","Piecewise Const."),
+    name = NULL
+  ) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 60), ylim = c(0, ymax)) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  ) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10))
+
+p
+
+
+ggsave("mean_foi_plots.png", p, width=9, height=4)
+```
+
+```{r}
+Exp_Damp_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_2025-09-29_17-20-13.rds")
+
+Exp_Damp_mods_rhoNA <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_RhoNA2025-09-30_14-04-40.rds")
+
+
+true_FOI <- no.waning.sample$dCFOI
+t_true_FOI <- no.waning.sample$t.sim
+
+library(ggplot2)
+
+# --- Helpers (same as before) ----------------------------------------------
+t_grid <- seq(0, 60, length.out = 400)
+
+predict_one <- function(m, t_grid) {
+  tryCatch({
+    par <- unlist(m$params_MLE, use.names = TRUE)
+    y   <- m$foi_t(t_grid, par)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t_grid)) else as.numeric(y)
+  }, error = function(e) rep(NA_real_, length(t_grid)))
+}
+
+mean_foi_curve <- function(mods, t_grid) {
+  mats <- vapply(mods, predict_one, FUN.VALUE = numeric(length(t_grid)), t_grid = t_grid)
+  rowMeans(mats, na.rm = TRUE)
+}
+
+get_true_bins <- function(t_bins, y_vals) {
+  if (is.matrix(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[,1], right = t_bins[,2])
+  else if (is.data.frame(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[[1]], right = t_bins[[2]])
+  else if (is.numeric(t_bins) && length(t_bins) == length(y_vals) + 1)
+    list(left = head(t_bins, -1), right = tail(t_bins, -1))
+  else
+    stop("t_true_FOI must be Nx2 bands or a vector of N+1 edges.")
+}
+
+# --- Mean curves for the two Exp-damped sets --------------------------------
+mean_exp_est   <- mean_foi_curve(Exp_Damp_mods,        t_grid)  # standard
+mean_exp_rhoNA <- mean_foi_curve(Exp_Damp_mods_rhoNA,  t_grid)  # rho NA
+
+# --- True FOI rectangles ----------------------------------------------------
+bins <- get_true_bins(t_true_FOI, true_FOI)
+df_true <- data.frame(
+  xmin = bins$left,
+  xmax = bins$right,
+  ymin = 0,
+  ymax = as.numeric(true_FOI)
+)
+
+# --- Lines data -------------------------------------------------------------
+df_lines <- rbind(
+  data.frame(age = t_grid, foi = mean_exp_est,   model = "Exp. Damp."),
+  data.frame(age = t_grid, foi = mean_exp_rhoNA, model = "Exp. Damp. (ρ NA)")
+)
+df_lines$model <- factor(df_lines$model, levels = c("Exp. Damp.","Exp. Damp. (ρ NA)"))
+
+# Calm palette: medium blue for standard, muted green for rho NA
+cols <- c(
+  "Exp. Damp."         = "#5B84B1",  # medium muted blue
+  "Exp. Damp. (ρ NA)"  = "#6EAA6C"   # muted green
+)
+
+ymax <- max(c(df_true$ymax, df_lines$foi), na.rm = TRUE) * 1.05
+
+# --- Plot -------------------------------------------------------------------
+p <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_line(
+    data = df_lines,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols,
+    breaks = c("Exp. Damp.","Exp. Damp. (ρ NA)"),
+    labels = c("Exp. Damp.","Exp. Damp. (ρ NA)"),
+    name = NULL,
+    na.translate = FALSE
+  ) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 60), ylim = c(0, ymax)) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10), minor_breaks = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(colour = "grey85")
+  )
+
+p
+
+# Optional export
+# ggsave("mean_foi_exp_damped_rho_compare.png", p, width = 9, height = 4, dpi = 300)
+
+```
+## version with CIs
+```{r}
+library(ggplot2)
+
+# ---- Helpers ---------------------------------------------------------------
+t_grid <- seq(0, 60, length.out = 400)
+
+predict_one <- function(m, t_grid) {
+  # Robust: returns length(t_grid) even if foi_t is scalar; errors -> NAs
+  tryCatch({
+    par <- unlist(m$params_MLE, use.names = TRUE)
+    y   <- m$foi_t(t_grid, par)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t_grid)) else as.numeric(y)
+  }, error = function(e) rep(NA_real_, length(t_grid)))
+}
+
+# Mean + 95% quantiles across models at each age
+mean_q95_curve <- function(mods, t_grid, label) {
+  preds <- vapply(mods, predict_one, FUN.VALUE = numeric(length(t_grid)), t_grid = t_grid)
+  # Drop models that produced all-NA predictions
+  if (is.matrix(preds)) {
+    good <- colSums(!is.na(preds)) > 0
+    preds <- preds[, good, drop = FALSE]
+  }
+  foi_mean <- rowMeans(preds, na.rm = TRUE)
+  qfun <- function(x) suppressWarnings(quantile(x, probs = c(0.025, 0.975), na.rm = TRUE))
+  qs <- t(apply(preds, 1, qfun))  # [n_t x 2]
+  colnames(qs) <- c("foi_lower","foi_upper")
+
+  data.frame(
+    age = t_grid,
+    foi = foi_mean,
+    foi_lower = qs[, "foi_lower"],
+    foi_upper = qs[, "foi_upper"],
+    model = label,
+    row.names = NULL
+  )
+}
+
+get_true_bins <- function(t_bins, y_vals) {
+  if (is.matrix(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[,1], right = t_bins[,2])
+  else if (is.data.frame(t_bins) && ncol(t_bins) >= 2)
+    list(left = t_bins[[1]], right = t_bins[[2]])
+  else if (is.numeric(t_bins) && length(t_bins) == length(y_vals) + 1)
+    list(left = head(t_bins, -1), right = tail(t_bins, -1))
+  else
+    stop("t_true_FOI must be Nx2 bands or a vector of N+1 edges.")
+}
+
+# ---- Curves for the two Exp-damped sets -----------------------------------
+df_exp  <- mean_q95_curve(Exp_Damp_mods,       t_grid, "Exp. Damp.")
+df_rho  <- mean_q95_curve(Exp_Damp_mods_rhoNA, t_grid, "Exp. Damp. (ρ NA)")
+df_lines <- rbind(df_exp, df_rho)
+df_lines$model <- factor(df_lines$model, levels = c("Exp. Damp.","Exp. Damp. (ρ NA)"))
+
+# ---- True FOI rectangles ---------------------------------------------------
+bins <- get_true_bins(t_true_FOI, true_FOI)
+df_true <- data.frame(
+  xmin = bins$left,
+  xmax = bins$right,
+  ymin = 0,
+  ymax = as.numeric(true_FOI)
+)
+
+# ---- Palette ---------------------------------------------------------------
+cols <- c(
+  "Exp. Damp."         = "blue",  # medium muted blue
+  "Exp. Damp. (ρ NA)"  = "#5B84B1"   # muted medium green
+)
+
+# ---- Plot ------------------------------------------------------------------
+ymax <- max(c(df_true$ymax, df_lines$foi_upper), na.rm = TRUE) * 1.05
+
+p <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_ribbon(
+    data = df_lines,
+    aes(x = age, ymin = foi_lower, ymax = foi_upper, fill = model),
+    alpha = 0.40, color = NA, show.legend = FALSE
+  ) +
+  geom_line(
+    data = df_lines,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols,
+    breaks = c("Exp. Damp.","Exp. Damp. (ρ NA)"),
+    labels = c("Exp. Damp.","Exp. Damp. (ρ NA)"),
+    name = NULL
+  ) +
+  scale_fill_manual(values = cols) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 60), ylim = c(0, ymax)) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10), minor_breaks = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(colour = "grey85")
+  )
+
+p
+# ggsave("mean_foi_exp_damped_q95_ribbons.png", p, width = 9, height = 4, dpi = 300)
+
+```
+```{r}
+t_grid <- seq(0, 60, length.out = 400)
+
+## ---------------- Colors ----------------
+cols1 <- c(
+  "Constant"            = "#CC6A6E",  # reddish
+  "Linear"              = "#D08C60",  # orange
+  "Piecewise constant"  = "#8A67C6"   # purple
+)
+
+cols2 <- c(
+  "Farrington"                         = "#5B84B1",  # blue
+  "Farrington (rho unspecified)"       = "#A8C4DA"   # lighter blue
+)
+
+## ---------------- Shared y-limit ----------------
+ymax <- max(
+  df_true$ymax,
+  mean_const, mean_linear, mean_piece,
+  mean_exp, mean_exp_rhoNA,
+  na.rm = TRUE
+) * 1.05
+
+## ---------------- Plot 1: Constant + Piecewise + Linear ----------------
+df_lines_1 <- rbind(
+  data.frame(age = t_grid, foi = mean_const,  model = "Constant"),
+  data.frame(age = t_grid, foi = mean_piece,  model = "Piecewise constant"),
+  data.frame(age = t_grid, foi = mean_linear, model = "Linear")
+)
+df_lines_1$model <- factor(df_lines_1$model,
+  levels = c("Constant", "Piecewise constant", "Linear")
+)
+
+p1 <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_line(
+    data = df_lines_1,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols1,
+    breaks = c("Constant", "Piecewise constant", "Linear"),
+    labels = c("Constant", "Piecewise Const.", "Linear"),
+    name = NULL
+  ) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 60), ylim = c(0, ymax)) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right", panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10))
+
+p1
+ggsave("mean_foi_constant_linear_piecewise.png", p1, width = 7, height = 4, dpi = 300)
+
+## ---------------- Plot 2: Farrington vs Farrington (rho unspecified) ----------------
+df_lines_2 <- rbind(
+  data.frame(age = t_grid, foi = mean_exp,         model = "Farrington"),
+  data.frame(age = t_grid, foi = mean_exp_rhoNA,   model = "Farrington (rho unspecified)")
+)
+df_lines_2$model <- factor(df_lines_2$model,
+  levels = c("Farrington", "Farrington (rho unspecified)")
+)
+
+p2 <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_line(
+    data = df_lines_2,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols2,
+    breaks = c("Farrington", "Farrington (rho unspecified)"),
+    labels = c("Exp. Damp. (\u03C1 = 1)", "Exp. Damp. (\u03C1 unspecified)"),
+    name = NULL
+  ) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 60), ylim = c(0, ymax)) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right", panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10))
+
+p2
+ggsave("mean_foi_farrington_vs_rhoNA.png", p2, width = 7, height = 3, dpi = 300)
+
+## ---------------- Plot 3: Splines (lifelong immunity) vs Splines (waning immunity) ----------------
+# These models are a bit different
+# each one contains $spline_pi_t and an $foi_t function which takes in parameters (t, spline_pi_t)
+# pull out each of the 1000 models 1 by 1, for each one, calculate the foi_t over t_grid, find the mean over all the 1000 models for each t and plot in green. The spline with lifelong immunity (omega=0) must be lighter green than the spline with waning immunity (omega = 1/15)
+## ---------------- Plot 3: Splines (lifelong immunity) vs Splines (waning immunity) ----
+## Each model has $spline_pi_t and an $foi_t(t, spline_pi_t)
+t_grid <- seq(0, 50, length.out = 400)
+
+
+# Helper tailored for spline models (foi_t expects the spline object, not params)
+predict_one_spline <- function(m, t_grid) {
+  tryCatch({
+    y <- m$foi_t(t_grid, m$spline_pi_t)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t_grid)) else as.numeric(y)
+  }, error = function(e) rep(NA_real_, length(t_grid)))
+}
+
+mean_foi_curve_spline <- function(mods, t_grid) {
+  mats <- vapply(mods, predict_one_spline, FUN.VALUE = numeric(length(t_grid)), t_grid = t_grid)
+  rowMeans(mats, na.rm = TRUE)
+}
+
+# Mean curves for the two spline settings
+mean_spline_life  <- mean_foi_curve_spline(Spline_lifelong, t_grid)  # omega = 0 (lifelong)
+mean_spline_wane  <- mean_foi_curve_spline(Spline_waning,   t_grid)  # omega = 1/15
+
+# Colors: lifelong = lighter green, waning = darker green
+cols3 <- c(
+  "Splines (omega=0)"     = "#74C476",  # lighter green
+  "Splines (omega=1/15)"  = "#1B7837"   # darker green
+)
+
+# y-limit shared with background + these two curves
+ymax3 <- max(df_true$ymax, mean_spline_life, mean_spline_wane, na.rm = TRUE) * 1.05
+
+# Tidy data for lines
+df_lines_3 <- rbind(
+  data.frame(age = t_grid, foi = mean_spline_life, model = "Splines (omega=0)"),
+  data.frame(age = t_grid, foi = mean_spline_wane, model = "Splines (omega=1/15)")
+)
+df_lines_3$model <- factor(df_lines_3$model, levels = c("Splines (omega=0)", "Splines (omega=1/15)"))
+
+# Plot 3
+p3 <- ggplot() +
+  geom_rect(
+    data = df_true,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "grey80", color = "white", linewidth = 0.25
+  ) +
+  geom_line(
+    data = df_lines_3,
+    aes(age, foi, color = model),
+    linewidth = 0.9
+  ) +
+  scale_color_manual(
+    values = cols3,
+    breaks = c("Splines (omega=0)", "Splines (omega=1/15)"),
+    labels = c("Splines (ω = 0)", "Splines (ω = 1/15)"),
+    name = NULL
+  ) +
+  labs(x = "Age", y = "FOI") +
+  coord_cartesian(xlim = c(0, 50), ylim = c(0, ymax3)) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right", panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = seq(0, 60, by = 10))
+
+p3
+ggsave("mean_foi_splines_lifelong_vs_waning.png", p3, width = 7, height = 4, dpi = 300)
+
+```
+#R0
+```{r}
+Constant_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_RestrictedCatalytic_Constant_2025-09-29_15-23-01.rds")
+Constant_mods <- lapply(Constant_mods, function(m) {
+  f_old <- m$foi_t
+  m$foi_t <- function(t, par) {
+    y <- f_old(t, par)
+    if (length(y) == 1L) rep_len(as.numeric(y), length(t)) else as.numeric(y)
+  }
+  m
+})
+Linear_mods <- readRDS("Finished Model Runs (1000 population samples)/corrected_SimpleCatalytic_NegativeCorrected_Linear.rds")
+Linear_mods <- Linear_mods[-368]
+Exp_Damp_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_2025-09-29_17-20-13_fixed.rds")
+Exp_Damp_mods_rhoNA <- readRDS("Finished Model Runs (1000 population samples)/pop1_Farrington_RhoNA2025-09-30_14-04-40_fixed.rds")
+Piecewise_const <- readRDS("Finished Model Runs (1000 population samples)/SimpleCatalytic_PiecewiseConstant.rds")
+Spline_lifelong <- readRDS("Finished Model Runs (1000 population samples)/pop1_SimpleCatalytic_Splines_2025-09-30_16-55-03.rds")
+Spline_waning <- readRDS("Finished Model Runs (1000 population samples)/pop1_WaningImmunity_Splines_15_2025-09-30_17-07-35.rds")
+
+
+# splines
+age_bins <- no.waning.sample$t.sim # each row is an age group a, b, -> [a,b)
+pop_per_bin <- c(515.852, 1913.218, 2139.428, 1920.737, 1701.976, 2705.607, 2116.874, 1559.692, 2345.608)
+
+pi_t <- function(t, spline_pi_t) {
+  pi <- predict(spline_pi_t, t)$y
+}
+
+group_pi <- function(a, b, spline_pi_t) {
+  integral <- integrate(pi_t, a, b, spline_pi_t=spline_pi_t)$value
+  integral/(b-a)
+}
+
+R0(Spline_lifelong[[1]], age_bins, pop_per_bin)
+R0(Farrington_w0_truew0, age_bins, pop_per_bin)
+# this func will take in a list containing 1000 models (each one is one element in the list) and a true R0 value
+# for each of the 1000 models: run R0(model, age_bins, pop_per_bin)
+# R0 func will return a list:
+# $R0
+# [1] 3.35903
+# 
+# $R0_CI
+#     2.5%    97.5% 
+# 2.558462 3.163572 
+# calculate: average R0 estimate across the 1000 models, the 95% quantile of the R0 estimates (a 95% CI over all 1000 model R0 point estimates), and a coverage estimate (out of the 1000 models R0_CI, what proportion of them contained the true R0)
+
+# Summarize R0 across many fitted models
+# - models: list of fitted model objects
+# - age_bins, pop_per_bin: inputs required by your R0() function
+# - true_R0: scalar true value for coverage
+# - R0_fun: function with signature R0_fun(model, age_bins, pop_per_bin)
+summarize_R0 <- function(models, age_bins, pop_per_bin, true_R0, R0_fun = R0) {
+  n <- length(models)
+  r0_pts <- rep(NA_real_, n)
+  covered <- rep(NA, n)  # TRUE/FALSE/NA if failed
+  
+  for (i in seq_len(n)) {
+    print(i)
+    res <- tryCatch(
+      R0(models[[i]], age_bins, pop_per_bin),
+      error = function(e) NULL
+    )
+    if (is.null(res)) next
+    
+    r0_pts[i] <- suppressWarnings(as.numeric(res$R0))
+    
+    ci <- res$R0_CI
+    if (!is.null(ci) && length(ci) == 2 && all(is.finite(ci))) {
+      rng <- range(as.numeric(ci))
+      covered[i] <- is.finite(true_R0) && true_R0 >= rng[1] && true_R0 <= rng[2]
+    } else {
+      covered[i] <- NA
+    }
+  }
+  
+  ok <- is.finite(r0_pts)
+  n_success <- sum(ok)
+  if (n_success == 0L) {
+    return(list(
+      mean_R0 = NA_real_,
+      R0_point_estimates_CI = c(`2.5%` = NA_real_, `97.5%` = NA_real_),
+      coverage = NA_real_,
+      n_models = n,
+      n_success = 0L,
+      failed_indices = seq_len(n)
+    ))
+  }
+  
+  mean_R0 <- mean(r0_pts[ok])
+  ci_points <- stats::quantile(r0_pts[ok], probs = c(0.025, 0.975), names = FALSE, na.rm = TRUE)
+  names(ci_points) <- c("2.5%", "97.5%")
+  
+  cov_ok <- covered[ok]
+  coverage <- if (all(is.na(cov_ok))) NA_real_ else mean(cov_ok, na.rm = TRUE)
+  
+  list(
+    mean_R0 = mean_R0,
+    R0_point_estimates_CI = ci_points,  # 2.5% and 97.5% quantiles of point estimates
+    coverage = coverage,                # proportion of per-model CIs containing true_R0
+    n_models = n,
+    n_success = n_success,
+    failed_indices = which(!ok)
+  )
+}
+
+
+Constant_result <- summarize_R0(Constant_mods, age_bins, pop_per_bin, 3.239)
+saveRDS(Constant_result, "R0/Constant_result.rds")
+
+Linear_result <- summarize_R0(Linear_mods, age_bins, pop_per_bin, 3.239)
+Exp_Damp_result <- summarize_R0(Exp_Damp_mods, age_bins, pop_per_bin, 3.239)
+Exp_Damp_rhoNA_result <- summarize_R0(Exp_Damp_mods_rhoNA, age_bins, pop_per_bin, 3.239)
+Piecewise_const_result <- summarize_R0(Piecewise_const, age_bins, pop_per_bin, 3.239)
+Spline_lifelong_result <- summarize_R0(Spline_lifelong, age_bins, pop_per_bin, 3.239)
+saveRDS(Spline_lifelong_result, "R0/Spline_lifelong_result.rds")
+Spline_waning_result <- summarize_R0(Spline_waning, age_bins, pop_per_bin, 3.239)
+saveRDS(Spline_waning_result, "R0/Spline_waning_result.rds")
+
+```
+
+```{r}
+# R0 Results
+Constant_result <- readRDS("R0/Constant_result.rds")
+Linear_result <- readRDS("R0/Linear_result.rds")
+Exp_Damp_result <- readRDS("R0/Exp_Damp_result.rds")
+Exp_Damp_rhoNA_result <- readRDS("R0/Exp_Damp_rhoNA_result.rds")
+Piecewise_const_result <- readRDS("R0/Piecewise_const_result.rds")
+Spline_lifelong_result <- readRDS("R0/Spline_lifelong_result.rds")
+Spline_waning_result <- readRDS("R0/Spline_waning_result.rds")
+
+Constant_result$R0_point_estimates_CI
+Linear_result$mean_R0
+Exp_Damp_result$mean_R0
+Exp_Damp_rhoNA_result$mean_R0
+
+
+```

@@ -8,6 +8,15 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
       }
     }
 
+    if (foi_functional_form == "Linear") {
+      group_foi <- function(a, b, par) {
+        m <- par[["m"]]
+        c <- par[["c"]]
+
+        return((m*a + c + m*b + c)/2)
+      }
+    }
+
 
     else if (foi_functional_form == "Griffiths") {
       tau <- model_fixed_params$tau
@@ -19,9 +28,8 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
 
         # Adjust bounds if partially below tau
         a_adj <- max(a, tau)
-        b_adj <- b
-        integral <- ((b_adj - a_adj) * (2 * gamma0 * gamma1 + (b_adj + a_adj) * gamma0)) / 2
-        avg_foi <- integral / (b - a)
+
+        avg_foi<-gamma0*((b-a)/2 + a) + gamma0*gamma1
         return(avg_foi)
       }
     }
@@ -32,7 +40,7 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
         gamma1 <- par[["gamma1"]]
         gamma2 <- par[["gamma2"]]
         if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
-        integral <- (((-gamma1 - b * gamma0) * gamma2 - gamma0) * exp(-b * gamma2) + exp(-a * gamma2) * ((b - a) * gamma1 * gamma2^2 * exp(a * gamma2) + (gamma1 + a * gamma0) * gamma2 + gamma0)) / gamma2^2
+        integral <- (((gamma1 - b * gamma0) * gamma2 - gamma0) * exp(-b * gamma2) + exp(-a * gamma2) * ((b - a) * gamma1 * gamma2^2 * exp(a * gamma2) + (a * gamma0 - gamma1) * gamma2 + gamma0)) / gamma2^2
         avg_foi <- integral / (b - a)
         return(avg_foi)
       }
@@ -66,7 +74,7 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
         return(result)
       }
     }
-    
+
     else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
       w <- model_fixed_params$w
       group_foi <- function(a, b, spline_pi_t) {

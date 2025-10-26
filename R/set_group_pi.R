@@ -74,6 +74,78 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
     }
   }
 
+  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic_NegativeCorrected" && foi_functional_form == "Linear") {
+    group_pi <- function(a, b, par) {
+      m <- par[["m"]]
+      c <- par[["c"]]
+
+      # real erf via pnorm (no extra packages)
+      erf <- function(x) {
+        2 * pnorm(x * sqrt(2)) - 1
+      }
+
+      # real erfi via Dawson's integral: erfi(x) = 2/sqrt(pi) * exp(x^2) * dawson(x)
+      # requires pracma for dawson(); avoids complex usage entirely
+      erfi <- function(x) {
+        pracma::erfi(x)
+      }
+
+      # --- main integral ---
+      # Integrates 1 - exp(-m/2 * t^2 - c * t) from a to b
+      integral_val <- function(a, b, c, m) {
+        if (m > 0) {
+          # m > 0: erf version
+          s <- sqrt(m / 2)
+          shift_b <- b + c / m
+          shift_a <- a + c / m
+          (b - a) -
+            exp(c^2 / (2 * m)) * sqrt(pi / (2 * m)) *
+            ( erf(s * shift_b) - erf(s * shift_a) )
+
+        } else if (m < 0) {
+          # m < 0: erfi version (all arguments real)
+          s <- sqrt(-m / 2)
+          shift_b <- b + c / m
+          shift_a <- a + c / m
+          (b - a) -
+            exp(c^2 / (2 * m)) * sqrt(pi / (-2 * m)) *
+            ( erfi(s * shift_b) - erfi(s * shift_a) )
+
+        } else {
+          # m == 0: integrand is 1 - exp(-c t)
+          if (c != 0) {
+            (b - a) + (exp(-c * b) - exp(-c * a)) / c
+          } else {
+            # m = 0, c = 0: integrand is 1 - exp(0) = 0
+            0
+          }
+        }
+      }
+
+      if (m == 0) {
+        if (c > 0) {
+          return( integral_val(a, b, c, m) / (b-a) )
+        } else {
+          return(0)
+        }
+      }
+      root <- -c/m
+      if (a < root && b > root) { # then root is between a and b
+        if (m > 0) { # positive slope therefore positive foi to the right of the root
+          return( integral_val(root,b,c,m)/(b-a) )
+        }
+        else { # negative slope therefore positive foi to the left of the root
+          return( integral_val(a,root,c,m)/(b-a) )
+        }
+      } else {
+        if ((m*((a+b)/2) + c)>0) { # foi is positive in interval a,b
+          return( integral_val(a,b,c,m)/(b-a) )
+        }
+        else (return(0)) # foi is negative in interval a,b
+      }
+    }
+  }
+
     else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
       tau <- model_fixed_params$tau
       group_pi <- function(a, b, par) {
@@ -159,7 +231,6 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
         return(auc/(b-a))
       }
     }
-
 
   # else if (catalytic_model_type == "SimpleCatalytic" || catalytic_model_type == "OriginalCatalytic"|| catalytic_model_type == "RestrictedCatalytic"|| catalytic_model_type == "WaningImmunity" || catalytic_model_type == "Vaccine") {
   #   group_pi <- function(a, b, par) {

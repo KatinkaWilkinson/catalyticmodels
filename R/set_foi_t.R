@@ -44,6 +44,15 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
     }
   }
 
+  else if (foi_functional_form == "Linear") {
+    foi_t <- function(t, par) {
+      m <- par[["m"]]
+      c <- par[["c"]]
+
+      return(m*t+c)
+    }
+  }
+
   else if (foi_functional_form == "Griffiths") {
     tau <- model_fixed_params$tau
     foi_t <- function(t, par) {
@@ -59,7 +68,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
       gamma0 <- par[["gamma0"]]
       gamma1 <- par[["gamma1"]]
       gamma2 <- par[["gamma2"]]
-      return((gamma0*t + gamma1)*exp(-gamma2*t)+gamma1)
+      return((gamma0*t - gamma1)*exp(-gamma2*t)+gamma1)
     }
   }
 
@@ -86,7 +95,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
       return(foi)
     }
   }
-  
+
   else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
     w <- model_fixed_params$w
     foi_t <- function(t, spline_pi_t) {
@@ -94,10 +103,10 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
       dpi_t_dt <- predict(spline_pi_t, t, deriv=1)$y
       pi <- pmin(pi, 1 - 1e-8) # to prevent a divide by 0 error
       foi <- (dpi_t_dt + pi*w) / (1 - pi)
-      
+
       # dpi_t_dt <- diff(pi_t)/diff(t)
       # foi_t <- dpi_t_dt / (1 - pi_t[-length(pi_t)]) this is what I used to have but apparently using splines is better for finding the derivative of pi_t
-      
+
       return(foi)
     }
   }

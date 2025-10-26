@@ -1,0 +1,438 @@
+---
+title: "How to: catalyticmodels package"
+format: html
+editor: visual
+---
+
+# FoiFromCatalyticModels function
+
+FoiFromCatalyticModel \<- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init=NA, rho=1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, boot_num = 1000, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, trace = 0, convergence_attempts=20) {
+
+t - vector of exact ages or an mx2 matrix of m age groups \[a, b)
+
+y - number of seropositive people per age/age group
+
+n - number of people tested per age/age group
+
+pi_t(t, par) - outputs the proportion of seropositive people at age t, given model parameters in par (a named vector!) (ie, this should NOT include a rho variable. Assay sensitivity is used to correct the probability of observing seropositive results outside of the pi_t function. This is handled by the FoiFromCatalyticModel function.)
+
+foi_t(t, par) - outputs the force of infection at age t. This is the only function that MUST be vectorised (t can be a vector, and if it is then foi_t will output a vector with the same length) - if this becomes an issue then I can alter the code so that foi_t does not need to handle vector t values.
+
+group_pi(a, b, par) - outputs the representative proportion of seropositive people for an age group \[a, b). So far, we have used averages (1/(b-a) \* integral of pi_t from a to b), but technically it can be anything you want, if you have a method that you prefer over the mean.
+
+group_foi(a, b, par) - outputs the force of infection for an age group \[a, b). Like before, we used means but you don't have to if you prefer another method.
+
+par_init - a NAMED vector containing initial values to be used by the optimisation algorithm during optimisation. The parameters in par_init are unknowns in pi_t/group_pi/foi_t/group_foi that will be provided in the par parameter in these functions. No need to provide an initial value for rho since it should not be provided to pi_t/group_pi/foi_t/group_foi - the algorithm handles the initial value for rho on its own (if this is a problem I can change it!).
+
+rho - assay sensitivity, any number between \[0,1\], but the default is perfect sensitivity (1). If rho = NA, then rho will be treated as an unknown parameter and will be estimated and MLEs and CIs will be outputted.
+
+catalytic_model_type - If neither pi_t nor group_pi are provided, then a catalytic_model_type must be specified. If the catalytic models below contain any unknowns (at the moment that is only true for the OriginalCatalytic option), their initial values don't need to be provided in par_init because there are predefined default par_init vectors built in, but if you would like to specify your own par_init you can, as long as the vector elements are named correctly. options are: *"SimpleCatalytic"* (Muench with k=1, l=1), *"OriginalCatalytic"* (Muench with k and l unknown), *"RestrictedCatalytic"* (Muench with k and l provided in model_fixed_params), *"WaningImmunity"* (The catalytic model that includes waning immunity, w provided in model_fixed_params).
+
+foi_functional_form - If neither foi_t nor group_foi are provided, then a foi_functional_form must be specified. You do not need to specify initial values for the unknowns in the foi equations below in the par_init vector, as there is a built in par_init default, however you can specify your own par_init if you would like, as long as the vector elements are named correctly. options are: *"Constant"* - constant foi (unknonwns = foi) *"Griffiths"* - linear with maternal antibodies (tau to be included in model_fixed_params, unknowns = gamma0, gamma1) *"Farringtons"* - dampered linear model (unknowns = gamma0, gamma1, gamma2) *"PiecewiseConstant"* - piecewise constant foi (choose where you want your pieces to start and end by providing upper_cutoffs in model_fixed_params. upper_cutoffs should contain the upper bounds of the pieces that you want to calculate. Eg, if you want a piece from age \[0-15), \[15-30),\[30-50), then upper_cutoffs = c(15,30,50), unknowns = foi1, foi2, ... foim for m pieces). *"Splines"* - foi is estimated using splines and the equation given in 75 years paper. Note that you need to specify the catalytic_model_type if you choose Splines, as the foi estimation methods depends on the catalytic model type. Currently, only the catalytic_model_type = "SimpleCatalytic" option works, since the 75 years paper only explained how to use nonparametric techniques for the simple catalytic model type.
+
+model_fixed_params - list containing values for the fixed parameters (not values that are being estimated by the model) in the catalytic models (for example, tau for Griffiths and w for the waning immunity model, etc).
+
+boot_num - the number of bootstrap samples used to form the bootstrap CI
+
+lower and upper - (vectors) lower and upper bounds on all the parameters in par_init. -Inf to Inf by default. Note that when only one parameter is being estimated (eg. in the Constant SimpleCatalytic case), the Brent optimisation method is used which requires finite bounds on the parameter! That means that if you are only estimating one parameter, you MUST specify your own finite lower and upper bounds.
+
+maxit, factr, reltol, trace - optim control parameters. Read optim documentation to understand what these do
+
+convergence_attempts - number of times optimisation is attempted for each sample (original or bootstrap) before giving up. If convergence fails in one attempt, the initial parameters will be altered for the next attempt. If convergence is never reached for any of the attempts, then an error message will be thrown. If the original sample's optimisation fails, the function will stop. If a bootstrap sample's optimisation fails, that sample will be skipped. The function outputs a message indicating whether any bootstrap samples' optimisations failed (ordinarily, none should fail).
+
+Options: 1. Provide your own pi_t, foi_t 2. Provide group_pi and group_foi 3. Provide foi_t/group_foi only 4. Provide pi_t/group_pi only 5. Provide neither foi_t/group_foi nor pi_t/group_pi
+
+### 1. Provide pi_t and foi_t
+
+#### 1.1 Exact ages
+
+For exact ages, just pi_t and foi_t are sufficient, since group_pi and group_foi are never used
+
+```{r}
+t <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+n <- rep(50, length(t))
+y <- c(0, 0, 1, 2, 5, 10, 20, 30, 40, 45)
+
+# Griffiths foi and the simple catalytic pi_t and foi_t functions
+pi_t <- function(t, par) {
+  tau <- 0.5  # maternal antibody cutoff
+  gamma0 <- par[["gamma0"]]
+  gamma1 <- par[["gamma1"]]
+  return(ifelse(t <= tau, 0, 1 - exp(-((gamma0 / 2) * (t^2 - tau^2) + gamma0 * gamma1 * (t - tau)))))
+}
+
+foi_t <- function(t, par) {
+  tau <- 2 # in this case!
+  gamma0 <- par[["gamma0"]]
+  gamma1 <- par[["gamma1"]]
+  return(ifelse(t <= tau, 0, gamma0 * (t + gamma1)))
+}
+
+par_init <- c(gamma0=0.1, gamma1=0.5)
+
+result <- FoiFromCatalyticModel(t, y, n, pi_t=pi_t, foi_t=foi_t, par_init=par_init)
+
+result$params_MLE
+result$params_CI
+result$foi_MLE
+result$foi_CIs
+```
+
+#### 1.2 Age groups
+
+If only foi_t and pi_t are provided, the default group_pi and group_foi will be used to calculate pi and foi over age categories. The default group_pi and group_foi calculate the mean of the provided foi_t and pi_t over the age range (1/(b-a) \* integral of func from a to b). This can be slow and can be avoided by hardcoding group_pi and group_foi so that means are calculated without using the integrate function (see section 2).
+
+```{r}
+t <- matrix(c(1,4, 4,8, 8,11, 11,15, 15,18, 18,22, 22,25, 25,29, 29,32, 32,35), ncol=2, byrow = TRUE)
+n <- rep(50, length(t))
+y <- c(0, 0, 1, 2, 5, 10, 20, 30, 40, 45)
+
+# original catalytic model with constant foi
+pi_t <- function(t, par) {
+        k <- par[["k"]]
+        l <- par[["l"]]
+        foi <- par[["foi"]]
+        return(k * (l - exp(-foi * t)))
+}
+
+foi_t <- function(t, par) {
+      foi <- par[["foi"]]
+      return(rep(foi, length(t))) # constant foi.
+}
+
+par_init <- c(k=0.8, l=0.8, foi=0.5)
+
+result <- FoiFromCatalyticModel(t, y, n, pi_t=pi_t, foi_t=foi_t, par_init=par_init, lower=c(0,0,0), upper = c(1,1,1))
+
+result$params_MLE
+result$params_CI
+result$foi_MLE
+result$foi_CIs
+```
+
+### 2. Provide group_pi and group_foi
+
+This is only useful when you are working with age groups. When working with age groups, group_pi and group_foi are sufficient since pi_t and foi_t aren't used. Providing a group_pi and group_foi that do not contain the integrate function helps significantly with speedup, since optim no longer needs to perform many integrations.
+
+```{r}
+t <- matrix(c(1,4, 4,8, 8,11, 11,15, 15,18, 18,22, 22,25, 25,29, 29,32, 32,35), ncol=2, byrow = TRUE)
+n <- rep(50, length(t))
+y <- c(0, 0, 1, 2, 5, 10, 20, 30, 40, 45)
+
+# original catalytic model with constant foi
+group_pi <- function(a, b, par) {
+  k <- par[["k"]]
+  l <- par[["l"]]
+  foi <- par[["foi"]]
+  if (foi < 1e-6) foi <- 1e-6
+  return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
+}
+
+group_foi <- function(a, b, par) {
+  foi <- par[["foi"]]
+  return(foi) # constant foi
+}
+
+par_init <- c(k=0.8, l=0.9, foi=0.2)
+
+result <- FoiFromCatalyticModel(t, y, n, group_pi=group_pi, group_foi=group_foi, par_init=par_init, lower = c(0, 0, 0), upper = c(1,1,1))
+
+result$params_MLE
+result$params_CI
+result$foi_MLE
+result$foi_CIs
+
+R0(result, t, n)
+```
+
+### 3. Provide foi_t only
+
+In this case, you MUST specify the catalytic_model_type. \#### 3.1 Exact ages
+
+```{r}
+t <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+n <- rep(50, length(t))
+y <- c(0, 0, 1, 2, 5, 10, 20, 30, 40, 45)
+
+# piecewise constant foi
+foi_t <- function(t, par) {
+  foi_y <- par[["foi_y"]]
+  foi_o <- par[["foi_o"]]
+  ifelse(t < 6, foi_y, foi_o)
+}
+
+par_init <- c(foi_y=0.2, foi_o=0.2)
+result <- FoiFromCatalyticModel(t, y, n, foi_t=foi_t, catalytic_model_type="SimpleCatalytic", par_init=par_init, boot_num=50)
+
+par_init <- c(foi_y=0.2, foi_o=0.2, k=0.8, l=0.8) # here, since I am providing my own par_init, I should include k and l, which are OriginalCatalytic unknown parameters!
+result <- FoiFromCatalyticModel(t, y, n, foi_t=foi_t, catalytic_model_type="OriginalCatalytic", par_init=par_init, boot_num=50) # if the results are nonsense then add lower and upper bounds
+
+par_init <- c(foi_y=0.2, foi_o=0.2)
+result <- FoiFromCatalyticModel(t, y, n, foi_t=foi_t, catalytic_model_type="RestrictedCatalytic", par_init=par_init, boot_num=50, model_fixed_params = list(k=0.9, l=0.9))
+
+
+result <- FoiFromCatalyticModel(t, y, n, foi_t=foi_t, catalytic_model_type="WaningImmunity", par_init=par_init, boot_num=50, model_fixed_params = list(w=0.3))
+
+result$params_MLE
+result$params_CI
+result$foi_MLE
+result$foi_CIs
+```
+
+# Common Mistakes:
+
+Below are variables defined to help illustrate the errors that one might face when calling the FoiFromCatalyticModels function
+
+```{r}
+# --- Helpers: valid functions you can reuse ---
+good_foi_t      <- function(t, par) rep(par[1], length(t))
+good_pi_t       <- function(t, par) 1 - exp(-par[1] * t)
+good_group_pi   <- function(a, b, par) 1 - exp(-par[1] * (b - a))
+good_group_foi  <- function(a, b, par) par[1]
+
+# --- Valid baseline data (vector ages) ---
+t_vec <- c(1, 5, 10)
+y_vec <- c(1, 2, 3)
+n_vec <- c(2, 3, 4)
+
+# --- Valid baseline data (matrix age groups) ---
+t_mat <- cbind(a = c(0,10,20), b = c(10,20,60))
+
+# Named par_init
+par_named <- c(beta = 0.1)
+```
+
+Here are a set of common mistakes:
+
+```{r}
+# 1. t wrong type
+FoiFromCatalyticModel(
+  t = data.frame(x = 1:3, y = 2:4),  # not vector or 2-col matrix
+  y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant"
+)
+# → "t must be either a numeric vector or a numeric 2-column matrix."
+
+# 2. y / n not numeric
+FoiFromCatalyticModel(
+  t = t_vec, y = c("a","b","c"), n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant"
+)
+# → "y and n must be numeric vectors."
+
+# 3. y / n length mismatch with t
+FoiFromCatalyticModel(
+  t = t_vec, y = c(1,2), n = c(2,3),
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant"
+)
+# → "y and n must each have length 3 (to match t)."
+
+# 4. Providing both pi_t and catalytic_model_type
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  pi_t = good_pi_t,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant",
+  par_init = par_named
+)
+# → "For vector t: provide exactly ONE of pi_t OR catalytic_model_type (not both)."
+# (You may also see: "If catalytic_model_type is provided, do not also provide pi_t or group_pi.")
+
+# 5. Providing both foi_t and foi_functional_form
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_t = good_foi_t,
+  foi_functional_form = "Constant",  # both provided
+  par_init = par_named
+)
+# → "Provide exactly ONE of foi_t OR foi_functional_form (not both)."
+
+
+# 6. foi_t has incorrect parameters (must be (t, par))
+bad_foi <- function(t) t  # missing 'par'
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_t = bad_foi,
+  par_init = par_named
+)
+# → "foi_t must be a function with arguments (t, par)."
+
+
+# 7. group_foi has incorrect parameters (must be (a, b, par))
+bad_group_foi <- function(a, b) 0  # missing 'par'
+FoiFromCatalyticModel(
+  t = t_mat, y = c(1,2,3), n = c(2,3,4),
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant",
+  group_foi = bad_group_foi
+)
+# → "group_foi (if provided) must be a function with arguments (a, b, par)."
+
+
+# 8. Neither pi_t, group_pi, catalytic_model_type provided
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  foi_functional_form = "Constant" # neither pi_t nor group_pi nor catalytic_model_type
+)
+# → "Provide at least one of: pi_t, group_pi, or catalytic_model_type."
+
+
+# 10. pi_t has incorrect parameters (must have (t, par))
+bad_pi <- function(t) t  # missing 'par'
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  pi_t = bad_pi,
+  foi_functional_form = "Constant",
+  par_init = par_named
+)
+# → "pi_t must be a function with arguments (t, par)."
+
+# 11. group_pi has incorrect parameters (must be (a, b, par)) 
+bad_group_pi <- function(a, b) 0.5  # missing 'par'
+FoiFromCatalyticModel(
+  t = t_mat, y = c(1,2,3), n = c(2,3,4),
+  group_pi = bad_group_pi,
+  foi_functional_form = "Constant",
+  par_init = par_named
+)
+# → "group_pi must be a function with arguments (a, b, par)."
+
+
+# 12. Invalid foi_functional_form
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "FooBar"
+)
+# → "foi_functional_form must be one of: Constant, Griffiths, Farringtons, PiecewiseConstant, Splines."
+
+# 13. Invalid catalytic_model_type
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "MegaCatalytic",
+  foi_functional_form = "Constant"
+)
+# → "catalytic_model_type must be one of: OriginalCatalytic, RestrictedCatalytic, SimpleCatalytic, WaningImmunity."
+
+
+# 14. fitting a Splines model without specifying SimpleCatalytic or WaningImmunity catalytic_model_type
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",  # not allowed with Splines
+  foi_functional_form = "Splines"
+)
+# → "If foi_functional_form is 'Splines', catalytic_model_type must be 'SimpleCatalytic' or 'WaningImmunity'."
+
+
+# 15. par_init required when user supplies any of pi_t/group_pi/foi_t/group_foi
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  pi_t = good_pi_t,                     # user function provided
+  foi_functional_form = "Constant"      # OK to include
+  # par_init omitted
+)
+# → "par_init must be provided (numeric vector) when supplying pi_t, group_pi, foi_t, or group_foi."
+
+
+# 16. par_init must be named
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  pi_t = good_pi_t,
+  foi_functional_form = "Constant",
+  par_init = c(0.1)  # unnamed
+)
+# → "par_init should be a NAMED numeric vector (non-empty names)."
+
+# 17. model_fixed_params list required when form/type needs it
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Griffiths",    # requires tau in model_fixed_params
+  model_fixed_params = NA
+)
+# → "model_fixed_params must be provided as a LIST when required by the chosen model/form."
+
+# 18. Griffiths needs tau
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Griffiths",
+  model_fixed_params = list()           # missing tau
+)
+# → "For foi_functional_form='Griffiths', model_fixed_params must contain numeric scalar 'tau'..."
+
+# 19. PiecewiseConstant needs upper_cutoffs
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "PiecewiseConstant",
+  model_fixed_params = list()           # missing upper_cutoffs
+)
+# → "For 'PiecewiseConstant', model_fixed_params must contain 'upper_cutoffs' (numeric vector)."
+
+# 21. upper_cutoffs max must cover max age in t
+FoiFromCatalyticModel(
+  t = c(5, 30, 65), y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "PiecewiseConstant",
+  model_fixed_params = list(upper_cutoffs = c(10, 20, 60))
+)
+# → "For 'PiecewiseConstant', max(upper_cutoffs) must be >= largest age in t (65.000)."
+
+# 22. RestrictedCatalytic needs k and l in [0,1]
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "RestrictedCatalytic",
+  foi_functional_form = "Constant",
+  model_fixed_params = list(k = 1.2, l = -0.1)
+)
+# → "For 'RestrictedCatalytic', model_fixed_params must contain k and l in [0, 1]."
+
+# 23. WaningImmunity needs w
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "WaningImmunity",
+  foi_functional_form = "Constant",
+  model_fixed_params = list()           # missing w
+)
+# → "For 'WaningImmunity', model_fixed_params must contain numeric scalar 'w'..."
+
+# 24. Brent bounds required in 1-parameter / Constant+Restricted|Simple scenarios
+# Case A: one-parameter optimisation & rho provided -> finite bounds required
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  pi_t = good_pi_t,                     # triggers need for par_init
+  foi_t = good_foi_t,                   # choose foi_t (not form)
+  par_init = c(theta = 0.1),            # ONE parameter
+  rho = 0.5,                            # non-NA
+  lower = -Inf, upper = Inf             # not finite
+)
+# → "Using Brent optimisation requires finite 'lower' and 'upper' with lower < upper under the specified conditions."
+
+# Case B: Constant + (Restricted|Simple) with rho provided -> finite bounds required
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "RestrictedCatalytic",
+  foi_functional_form = "Constant",
+  model_fixed_params = list(k = 0.3, l = 0.7),
+  rho = 0.5,
+  lower = -Inf, upper = Inf
+)
+# → same Brent-bounds error
+
+# 25. rho must be NA or in [0,1]
+FoiFromCatalyticModel(
+  t = t_vec, y = y_vec, n = n_vec,
+  catalytic_model_type = "OriginalCatalytic",
+  foi_functional_form = "Constant",
+  rho = 1.2
+)
+# → "rho must be NA or a numeric scalar in [0, 1]."
+
+
+```

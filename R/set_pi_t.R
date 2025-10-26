@@ -53,6 +53,47 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
     }
   }
 
+  else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic_NegativeCorrected" && foi_functional_form == "Linear") { # linear with maternal antibodies is the actual form...
+    pi_t <- function(t, par) {
+      pi_t_one <- function(tt) {
+        m <- par[["m"]]
+        c <- par[["c"]]
+
+        mean_foi <- function(a, b) {
+          (m*a + c + m*b - c)/2
+        }
+
+        if (m == 0) {
+          if (c > 0) {
+            return(1 - exp(-c * tt))
+          } else {
+            return(0)
+          }
+        }
+        root <- -c / m
+        if (root < tt) {
+          if (foi_t(tt, par) > 0) {
+            return(1 - exp(-(tt - root) * mean_foi(root, tt)))
+          } else {
+            return(1 - exp(-(root) * mean_foi(0, root)))
+          }
+        } else {
+          if (foi_t(tt, par) > 0) {
+            return(1 - exp(-(tt) * mean_foi(0, tt)))
+          } else {
+            return(0)
+          }
+        }
+      }
+
+      if (length(t) == 1L) {
+        pi_t_one(t)
+      } else {
+        vapply(t, pi_t_one, numeric(1))
+      }
+    }
+  }
+
   else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") { # linear with maternal antibodies is the actual form...
     tau <- model_fixed_params$tau
     pi_t <- function(t, par) {
@@ -124,6 +165,47 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
     }
   }
 
+  else if (catalytic_model_type == "SimpleCatalytic_NegativeCorrected") {
+    pi_t <- function(t, par) {
+      pi_one <- function(tt, par) {
+        roots <- sort(rootSolve::uniroot.all(function(x) foi_t(x, par), c(0.00001, tt)))
+
+        # Handle case with no roots
+        if (length(roots) == 0) {
+          if (foi_t(tt/2, par) > 0) {
+            return((tt) * group_foi(0, tt, par))
+          } else {
+            return(0)
+          }
+        }
+
+        cumulative_foi <- 0
+
+        # First segment [0, root[1]]
+        if (foi_t(roots[1] / 2, par) > 0) {
+          cumulative_foi <- cumulative_foi + (roots[1])*group_foi(0, roots[1], par)
+        }
+
+        # Segments between roots
+        for (i in seq_len(length(roots) - 1)) {
+          mid <- (roots[i] + roots[i+1]) / 2
+          if (foi_t(mid, par) > 0) {
+            cumulative_foi <- cumulative_foi + (roots[i+1]-roots[i])*group_foi(roots[i], roots[i+1], par)
+          }
+        }
+
+        # Final segment [last root, tt]
+        if (foi_t((roots[length(roots)] + tt) / 2, par) > 0) {
+          cumulative_foi <- cumulative_foi + (tt-roots[length(roots)])*group_foi(roots[length(roots)], tt, par)
+        }
+
+        val <- 1 - exp(-cumulative_foi)
+        return(val)
+      }
+      vapply(t, pi_one, numeric(1))
+      }
+  }
+
   # else if (catalytic_model_type == "WaningImmunity") {
   #     w <- model_fixed_params$w
   #     # pi_t: compute π(t) = 1 - ( exp(-∫_0^t [λ(x)+w] dx) + w ∫_0^t exp(-∫_u^t [λ(x)+w] dx) du )
@@ -155,7 +237,133 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   #   }
   # }
 
+  # else if (catalytic_model_type == "WaningImmunity") {
+  #   w <- model_fixed_params$w  # seroreversion rate
+  #
+  #   # helper: force any 1D function to return a vector matching x
+  #   vec1 <- function(f) {
+  #     function(x, ...) {
+  #       y <- f(x, ...)
+  #       if (length(y) == length(x)) return(y)
+  #       if (length(y) == 1L)       return(rep_len(y, length(x)))
+  #       vapply(x, function(xi) f(xi, ...), numeric(1))
+  #     }
+  #   }
+  #
+  #   # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
+  #   pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+  #     # vectorised λ(x)+w
+  #     integrand <- vec1(function(x) foi_t(x, par) + w)
+  #
+  #     pi_one <- function(tt) {
+  #       if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+  #
+  #       # I0 = ∫_0^t (λ+w) dx
+  #       I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+  #
+  #       # inner_exp(u): return vector same length as u
+  #       inner_exp <- function(u) {
+  #         vapply(u, function(ui) {
+  #           Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
+  #           exp(-Iu)
+  #         }, numeric(1))
+  #       }
+  #
+  #       # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
+  #       term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+  #
+  #       val <- 1 - (exp(-I0) + term2)
+  #       # optional clamp to [0,1]:
+  #       # val <- max(0, min(1, val))
+  #       return(val)
+  #     }
+  #
+  #     vapply(t, pi_one, numeric(1))
+  #   }
+  # }
+
   else if (catalytic_model_type == "WaningImmunity") {
+    # helper: force any 1D function to return a vector matching x
+    vec1 <- function(f) {
+      function(x, ...) {
+        y <- f(x, ...)
+        if (length(y) == length(x)) return(y)
+        if (length(y) == 1L)       return(rep_len(y, length(x)))
+        vapply(x, function(xi) f(xi, ...), numeric(1))
+      }
+    }
+
+    w <- model_fixed_params$w  # seroreversion rate
+    if (!is.na(w)) { # w is known!
+      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
+      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+        # vectorised λ(x)+w
+        integrand <- vec1(function(x) foi_t(x, par) + w)
+
+        pi_one <- function(tt) {
+          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+
+          # I0 = ∫_0^t (λ+w) dx
+          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+          # inner_exp(u): return vector same length as u
+          inner_exp <- function(u) {
+            vapply(u, function(ui) {
+              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
+              exp(-Iu)
+            }, numeric(1))
+          }
+
+          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
+          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+          val <- 1 - (exp(-I0) + term2)
+          # optional clamp to [0,1]:
+          # val <- max(0, min(1, val))
+          return(val)
+        }
+
+        vapply(t, pi_one, numeric(1))
+      }
+    } else { # w = is unknown
+      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
+      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+        w <- par[["w"]]
+        # vectorised λ(x)+w
+        integrand <- vec1(function(x) foi_t(x, par) + w)
+
+        pi_one <- function(tt) {
+          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+
+          # I0 = ∫_0^t (λ+w) dx
+          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+          # inner_exp(u): return vector same length as u
+          inner_exp <- function(u) {
+            vapply(u, function(ui) {
+              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
+              exp(-Iu)
+            }, numeric(1))
+          }
+
+          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
+          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+          val <- 1 - (exp(-I0) + term2)
+          # optional clamp to [0,1]:
+          # val <- max(0, min(1, val))
+          return(val)
+        }
+
+        vapply(t, pi_one, numeric(1))
+      }
+    }
+
+
+
+  }
+
+  else if (catalytic_model_type == "WaningImmunity_NegativeCorrected") {
     w <- model_fixed_params$w  # seroreversion rate
 
     # helper: force any 1D function to return a vector matching x
@@ -169,9 +377,9 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
     }
 
     # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-    pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+    pi_t <- function(t, par, rel.tol = 1e-4) {
       # vectorised λ(x)+w
-      integrand <- vec1(function(x) foi_t(x, par) + w)
+      integrand <- vec1(function(x) max(0,foi_t(x, par)) + w)
 
       pi_one <- function(tt) {
         if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
@@ -200,63 +408,6 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
     }
   }
 
-
-  else if (catalytic_model_type == "Vaccine") {
-    # ------------------------------------------------------------
-    # Model 1 (continuous-hazard vaccination)
-    # pi_t: compute π(t) under dπ/dt = (1-π)[λ(t) + ε ν(t)] - ω π
-    # Closed form:
-    #   Let Λ(t) = λ(t) + ε ν(t).
-    #   π(t) = 1 - (1 - π0) * exp(-∫_0^t [Λ(x) + ω] dx)
-    #                - ω * ∫_0^t exp(-∫_u^t [Λ(x) + ω] dx) du
-    # Requirements:
-    #   - foi_t: function of time t -> λ(t)
-    #   - v_t:  function of time t -> ν(t)    (vaccination rate)
-    #   - t:     numeric scalar or vector of times
-    #   - eps:   vaccination seroconversion efficacy ε (default 1)
-    #   - w:     waning rate ω >= 0             (default 0)
-    #   - pi0:   initial seropositive fraction π(0) (default 0)
-    # ------------------------------------------------------------
-    v_t <- model_fixed_params$v_t
-    eps <- model_fixed_params$eps
-    w <- model_fixed_params$w
-    pi0 <- model_fixed_params$pi0
-
-    pi_t <- function(t, par) {
-
-      if (!is.function(foi_t)) stop("foi_t must be a function of one numeric argument.")
-      if (!is.function(v_t))  stop("v_t must be a function of one numeric argument.")
-      stopifnot(is.numeric(eps), length(eps) == 1,
-                is.numeric(w),   length(w)   == 1,
-                is.numeric(pi0), length(pi0) == 1)
-
-      # Λ(t) = λ(t) + ε ν(t)
-      bigLambda <- function(x) foi_t(x, par) + eps * v_t(x)
-
-      pi_one <- function(tt) {
-        if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
-        integrand <- function(x) bigLambda(x) + w
-
-        # ∫_0^t [Λ(x) + ω] dx
-        I0 <- stats::integrate(integrand, lower = 0, upper = tt)$value
-
-        # inner: exp( - ∫_u^t [Λ(x) + ω] dx )
-        inner_exp <- function(u) {
-          Iu <- stats::integrate(integrand, lower = u, upper = tt)$value
-          exp(-Iu)
-        }
-
-        term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt)$value
-        val   <- 1 - (1 - pi0) * exp(-I0) - term2
-
-        # clamp tiny numerical drift
-        max(0, min(1, val))
-      }
-
-      vapply(t, pi_one, numeric(1))
-    }
-
-  }
 
   else {
     return(NA)

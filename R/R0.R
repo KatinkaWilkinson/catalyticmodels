@@ -12,8 +12,15 @@ R0 <- function(cat_model, age_bins, pop_per_bin) {
     mean_pi <- function(age_bin ,spline_pi_t) {
       l <- age_bin[1]
       u <- age_bin[2]
-      integral <- integrate(function(a) min(max(0,predict(spline_pi_t, a)$y),1), lower = l, upper = u)$value
-      integral / (l - u)
+      pi_t <- function(t, spline_pi_t) {
+        pi <- predict(spline_pi_t, t)$y
+      }
+
+      group_pi <- function(a, b, spline_pi_t) {
+        integral <- integrate(pi_t, a, b, spline_pi_t=spline_pi_t)$value
+        integral/(b-a)
+      }
+      group_pi(l, u, spline_pi_t)
     }
 
     seroprev_per_bin <- apply(age_bins, 1, mean_pi, spline_pi_t = cat_model$spline_pi_t)
@@ -21,11 +28,12 @@ R0 <- function(cat_model, age_bins, pop_per_bin) {
     R0_Estimate <- calc_R0(seroprev_per_bin)
 
     bootsamp_mean_pi <- function(y) {
-      bootsamp_spline <- smooth.spline(cat_model$t, y / cat_model$n)
+      bootsamp_spline <- smooth.spline((cat_model$t[,1] + cat_model$t[,2])/2 , y / cat_model$n)
       apply(age_bins, 1, mean_pi, bootsamp_spline) # returns vector of mean pi_s for each age group for one boot samp
     }
 
-    boot_seroprev_per_bin <- apply(cat_model$boot_y, 1, bootsamp_mean_pi) # each row is probably one bootsamp's results now
+    boot_y <- matrix(cat_model$boot_y, ncol=9)
+    boot_seroprev_per_bin <- apply(boot_y, 1, bootsamp_mean_pi) # each row is probably one bootsamp's results now
 
     boot_R0 <- apply(boot_seroprev_per_bin, 2, calc_R0)
     R0_CI <- quantile(boot_R0, probs = c(0.025,0.975), na.rm = TRUE)
