@@ -1,75 +1,141 @@
 #' Fit Catalytic Model and Estimate Force of Infection
 #'
-#' Fits a catalytic model to seroprevalence data to estimate parameters, force of infection (FOI),
-#' and associated bootstrap confidence intervals. Supports both exact-age and interval-age data,
-#' and allows different model types including spline-based models.
+#' Fits a catalytic model to seroprevalence data to estimate parameters and the
+#' force of infection (FOI), with bootstrap confidence intervals. Works for
+#' exact-age data or age-interval data and supports preset model choices
+#' via \code{catalytic_model_type} and \code{foi_functional_form}, including a spline option.
 #'
-#' @param t Numeric vector of ages or a two-column matrix of age intervals \[a, b\].
-#' @param y Numeric vector of the number of positive cases in each age group.
-#' @param n Numeric vector of total individuals tested in each age group.
-#' @param pi_t Function. Prevalence function of age and model parameters (ignored if \code{type} is provided).
-#' @param group_pi Function. Group prevalence function of age intervals and model parameters (ignored if \code{type} is provided).
-#' @param rho Numeric scalar. Test sensitivity/specificity adjustment parameter (default = 1).
-#' @param w Optional model-specific parameter.
-#' @param foi_t Function. FOI function of age and model parameters (ignored if \code{type} is provided).
-#' @param group_foi Function. Group FOI function of age intervals and model parameters (ignored if \code{type} is provided).
-#' @param type Character string specifying the model type. If not \code{NA}, appropriate functions and initial values are set automatically.
-#' @param model_fixed_params Optional list of fixed parameters for certain model types.
-#' @param boot_num Integer. Number of bootstrap samples to compute for confidence intervals (default = 1000).
-#' @param par_init Numeric vector of initial parameter values. If not supplied and \code{type} is provided, defaults are set automatically.
-#' @param lower Numeric vector or scalar of lower bounds for parameters (default = \code{-Inf}).
-#' @param upper Numeric vector or scalar of upper bounds for parameters (default = \code{Inf}).
-#' @param maxit Integer. Maximum number of iterations for optimisation (default = 100).
-#' @param factr Numeric. Optimisation tolerance for \code{L-BFGS-B} method (default = \code{1e7}).
-#' @param reltol Numeric. Relative convergence tolerance (default = \code{1e-8}).
+#' @param t Numeric vector of exact ages or a two-column matrix of age intervals \[a, b\].
+#' @param y Numeric vector of the number of seropositives in each age or age group.
+#' @param n Numeric vector of totals tested in each age or age group.
+#' @param pi_t Function. Point-prevalence function of age and parameters. Used when
+#'   \code{catalytic_model_type} and \code{foi_functional_form} are \emph{not} provided.
+#' @param foi_t Function. FOI function of age and parameters (or a spline-based FOI when
+#'   \code{foi_functional_form == "Splines"}). Used when presets are not provided, and also returned for later use.
+#' @param group_pi Function. Group prevalence for an interval \[a, b\] and parameters. Optional; if \code{NULL},
+#'   it is set from \code{catalytic_model_type}/\code{foi_functional_form} or from \code{pi_t}.
+#' @param group_foi Function. Group FOI for an interval \[a, b\] and parameters. Optional; if \code{NULL},
+#'   it is set from \code{catalytic_model_type}/\code{foi_functional_form} or from \code{foi_t}.
+#' @param par_init Numeric vector of initial parameter values. If \code{NA}, defaults are set from
+#'   \code{catalytic_model_type}/\code{foi_functional_form}.
+#' @param rho Numeric scalar or \code{NA}. Test adjustment parameter (e.g., sensitivity/specificity aggregate).
+#'   If \code{NA}, \code{rho} is estimated with bounds \[0.01, 1\].
+#' @param catalytic_model_type Character or \code{NA}. High-level model family selector used to configure
+#'   \code{pi_t}, \code{group_pi}, \code{foi_t}, and \code{group_foi} via internal \code{set_*} helpers.
+#' @param foi_functional_form Character or \code{NA}. FOI functional form. If \code{"Splines"}, a smoothed
+#'   prevalence is fit and FOI is derived from the spline; otherwise preset analytic forms are used.
+#' @param model_fixed_params Optional list. Fixed parameter values passed to the internal \code{set_*} helpers.
+#' @param boot_num Integer. Number of successful bootstrap fits to retain for confidence intervals (default 1000).
+#' @param lower Numeric vector or scalar of lower bounds for parameters (default \code{-Inf}).
+#' @param upper Numeric vector or scalar of upper bounds for parameters (default \code{Inf}).
+#' @param maxit Integer. Maximum iterations for \code{\link[stats]{optim}} (default 100).
+#' @param factr Numeric. Tolerance for \code{L-BFGS-B} (default 1e7). See \code{\link[stats]{optim}}.
+#' @param reltol Numeric. Reserved for future use in convergence control (not used in current code path).
+#' @param trace Integer. If > 0, passes a trace flag to \code{optim}.
+#' @param convergence_attempts Integer. Maximum number of retries per fit with random jittered starts (default 20).
+#' @param tau Numeric. Model-specific hyperparameter passed to \code{set_*} helpers (e.g., smoothing/penalty weight).
 #'
 #' @details
 #' The function:
 #' \enumerate{
-#'   \item Sets appropriate model functions and initial parameters if \code{type} is specified.
-#'   \item Estimates model parameters via maximum likelihood using \code{\link[stats]{optim}}.
-#'   \item Computes bootstrap replicates to estimate confidence intervals for parameters and FOI.
-#'   \item Returns FOI estimates for exact ages or age intervals, with bootstrap confidence intervals.
+#'   \item If \code{catalytic_model_type} and/or \code{foi_functional_form} are provided,
+#'         it configures \code{pi_t}, \code{group_pi}, \code{foi_t}, and \code{group_foi} using internal helper functions.
+#'   \item Estimates parameters by maximum likelihood with \code{\link[stats]{optim}}:
+#'         \code{"Brent"} for one parameter, otherwise \code{"L-BFGS-B"}. If convergence fails, it retries up to
+#'         \code{convergence_attempts} times with jittered initial values constrained to \code{[lower, upper]}.
+#'   \item Performs bootstrap resampling of \code{y} conditional on observed \code{t} and \code{n}. Fits are run
+#'         in parallel using the \pkg{future} ecosystem, and the first \code{boot_num} successful fits are used to
+#'         compute percentile 95% confidence intervals.
+#'   \item Computes FOI estimates by exact age or by age interval. For \code{foi_functional_form == "Splines"},
+#'         a smoothed prevalence (\code{\link[stats]{smooth.spline}}) is fit and FOI is derived from it.
 #' }
 #'
-#' Bootstrap resampling is performed from the observed data, and optimisation failures are reported.
+#' Parallelization: the function sets a multisession plan with \code{workers = max(1, parallel::detectCores() - 1)}
+#' for the bootstrap via \code{\link[future.apply]{future_lapply}} and \code{\link[future.apply]{future_sapply}}.
+#' You can change the plan before calling this function if you prefer a different backend.
 #'
 #' @return
-#' If \code{type != "Splines"}: A list containing:
+#' If \code{foi_functional_form != "Splines"} a list with:
 #' \itemize{
-#'   \item \code{params_MLE}: Named list of parameter maximum likelihood estimates.
-#'   \item \code{params_CI}: Named list of parameter 95\% confidence intervals.
-#'   \item \code{foi_MLE}: Named list of FOI estimates by age or age group.
-#'   \item \code{foi_CIs}: Named list of FOI 95\% confidence intervals by age or age group.
-#'   \item \code{bootparams}: Bootstrap parameter estimates (matrix).
-#'   \item \code{foi_t}: FOI function used.
-#' }
-#' If \code{type == "Splines"}: A list containing:
-#' \itemize{
-#'   \item \code{foi}: Named list of FOI estimates by age or age group.
-#'   \item \code{foi_CI}: Named list of FOI 95\% confidence intervals.
-#'   \item \code{foi_grid}: FOI estimates over a grid of ages.
-#'   \item \code{boot_y}: Bootstrap resampled response values.
-#'   \item \code{foi_t}: FOI function used.
-#'   \item \code{spline_pi_t}: Smoothed prevalence fit.
+#'   \item \code{params_MLE}: Named list of MLEs.
+#'   \item \code{params_CI}: Named list of 95% CIs for parameters (percentile).
+#'   \item \code{neg_loglik}: Value of the negative log-likelihood at the MLE.
+#'   \item \code{AIC}, \code{AICc}: Information criteria computed from \code{neg_loglik} and parameter count.
+#'   \item \code{foi_MLE}: Named list of FOI estimates by age or age interval label.
+#'   \item \code{foi_CIs}: Named list of 95% CIs for FOI by age or age interval label.
+#'   \item \code{bootparams}: Matrix of bootstrap parameter estimates (rows = replicates).
+#'   \item \code{foi_t}, \code{pi_t}, \code{group_pi}: Functions used, returned for downstream use.
+#'   \item \code{tau}: The \code{tau} value provided to the fit.
 #' }
 #'
-#' @export
+#' If \code{foi_functional_form == "Splines"} a list with:
+#' \itemize{
+#'   \item \code{foi}: Named list of FOI estimates by age or age interval label.
+#'   \item \code{foi_CI}: Named list of 95% CIs for FOI.
+#'   \item \code{foi_grid}: FOI evaluated on a regular age grid spanning the data.
+#'   \item \code{t}, \code{n}: The input ages (or intervals) and totals.
+#'   \item \code{boot_y}: Bootstrap resampled responses used to form the CIs.
+#'   \item \code{foi_t}: FOI function used to map from the spline fit to FOI.
+#'   \item \code{spline_pi_t}: The fitted \code{\link[stats]{smooth.spline}} object for prevalence.
+#' }
 #'
-#' @importFrom stats optim quantile smooth.spline
+#' @section Notes:
+#' \itemize{
+#'   \item If \code{rho} is \code{NA}, it is estimated with bounds \[0.01, 1\], and \code{lower}/\code{upper} are
+#'         extended accordingly.
+#'   \item Age-interval labels are formatted as \code{"[a,b)"} in the outputs.
+#'   \item Bootstrap messages report the number of total, converged, and used fits. If none converge, the function
+#'         returns \code{NULL}.
+#' }
 #'
 #' @examples
-#' # Example: fitting a hypothetical exact-age catalytic model
-#' # my_model <- FoiFromCatalyticModel(
-#' #   t = 1:50,
-#' #   y = round(runif(50, 0, 20)),
-#' #   n = rep(20, 50),
-#' #   type = "Constant",
-#' #   par_init = 0.05,
-#' #   lower = 0, upper = 1,
-#' #   boot_num = 100
-#' # )
-#' # str(my_model)
+#' # Age-interval dataset and midpoint exact-age variant
+#' t <- matrix(
+#'   c(
+#'     0, 1,
+#'     1, 5,
+#'     5, 10,
+#'     10, 15,
+#'     15, 20,
+#'     20, 30,
+#'     30, 40,
+#'     40, 50,
+#'     50, 60
+#'   ),
+#'   ncol = 2, byrow = TRUE
+#' )
+#' t_mid <- rowMeans(t)  # c(0.5, 3.0, 7.5, 12.5, 17.5, 25.0, 35.0, 45.0, 55.0)
+#'
+#' y <- c(28, 224, 577, 712, 740, 808, 848, 873, 894)
+#' n <- rep(1000, length(y))
+#'
+#' # Constant FOI, exact-age midpoints
+#' Constant_exactage <- FoiFromCatalyticModel(
+#'   t = t_mid,
+#'   y = y,
+#'   n = n,
+#'   catalytic_model_type = "SimpleCatalytic",
+#'   foi_functional_form = "Constant",
+#'   lower = 0, upper = 1
+#' )
+#'
+#' # Constant FOI, age-interval data
+#' Constant_agegroup <- FoiFromCatalyticModel(
+#'   t = t,
+#'   y = y,
+#'   n = n,
+#'   catalytic_model_type = "SimpleCatalytic",
+#'   foi_functional_form = "Constant",
+#'   lower = 0, upper = 1
+#' )
+#'
+#' @export
+#' @importFrom stats optim quantile smooth.spline
+#' @importFrom parallel detectCores
+#' @importFrom future plan
+#' @importFrom future.apply future_lapply future_sapply
+#' @importFrom stats runif
+#' @importFrom future multisession
 FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init=NA, rho=1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, boot_num = 1000, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, trace = 0, convergence_attempts=20, tau=0) {
   # check that inputs have been entered correctly!
   check_inputs(t, y, n, pi_t, foi_t, group_pi, group_foi,
@@ -217,7 +283,12 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
   }
 
 
-  plan(multisession, workers = max(1, parallel::detectCores() - 1))
+  #plan(multisession, workers = max(1, parallel::detectCores() - 1))
+  op <- future::plan(
+    future::multisession,
+    workers = max(1, parallel::detectCores() - 1)
+  )
+  on.exit(try(future::plan(op), silent = TRUE), add = TRUE)
 
   if (is.na(foi_functional_form) || foi_functional_form != "Splines") {
     res_list <- future_lapply(

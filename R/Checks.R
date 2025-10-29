@@ -1,3 +1,100 @@
+#' Validate Inputs for Catalytic-Model Fitting (internal)
+#'
+#' Performs comprehensive argument validation for functions that fit catalytic
+#' models (e.g., \code{FoiFromCatalyticModel}). On success it returns
+#' \code{TRUE} invisibly; otherwise it throws an error explaining all detected
+#' issues. Some non-fatal situations produce warnings.
+#'
+#' @param t Either a numeric vector of exact ages, or a numeric two-column
+#'   matrix of age intervals \[a, b\].
+#' @param y Numeric vector of seropositive counts, same length as the number of
+#'   age rows implied by \code{t}.
+#' @param n Numeric vector of total tested counts, same length as \code{y}.
+#' @param pi_t Optional function \code{pi_t(t, par)} returning prevalence at age
+#'   \code{t} for parameter vector \code{par}.
+#' @param foi_t Optional function \code{foi_t(t, par)} returning instantaneous
+#'   force of infection at age \code{t}.
+#' @param group_pi Optional function \code{group_pi(a, b, par)} returning mean
+#'   prevalence over an interval \[a, b\].
+#' @param group_foi Optional function \code{group_foi(a, b, par)} returning mean
+#'   force of infection over an interval \[a, b\].
+#' @param par_init Optional named numeric vector of initial parameter values, required
+#'   when any of \code{pi_t}, \code{group_pi}, \code{foi_t}, or \code{group_foi} is supplied.
+#' @param rho Either \code{NA} (to estimate) or a numeric scalar in \[0, 1\] for
+#'   test adjustment.
+#' @param catalytic_model_type Optional character string selecting a preset model
+#'   family. Allowed values: \code{"OriginalCatalytic"}, \code{"RestrictedCatalytic"},
+#'   \code{"SimpleCatalytic"}, \code{"WaningImmunity"},
+#'   \code{"SimpleCatalytic_NegativeCorrected"}, \code{"WaningImmunity_NegativeCorrected"}.
+#' @param foi_functional_form Optional character string selecting a preset FOI
+#'   form. Allowed values: \code{"Constant"}, \code{"Linear"}, \code{"Griffiths"},
+#'   \code{"Farringtons"}, \code{"PiecewiseConstant"}, \code{"Splines"}.
+#' @param model_fixed_params Optional list of fixed hyperparameters required by
+#'   some presets, e.g.,
+#'   \itemize{
+#'     \item \code{Griffiths}: \code{list(tau = numeric_scalar)}
+#'     \item \code{PiecewiseConstant}: \code{list(upper_cutoffs = numeric_vector)}
+#'     \item \code{RestrictedCatalytic}: \code{list(k = scalar, l = scalar)}
+#'     \item \code{WaningImmunity}: \code{list(w = scalar\ or\ NA)}
+#'   }
+#' @param lower,upper Lower and upper bounds used by optimisation. When using
+#'   one-parameter Brent optimisation, both must be finite with \code{lower < upper}.
+#'
+#' @details
+#' The following checks are performed:
+#' \enumerate{
+#'   \item \strong{Shapes}: \code{t} must be a numeric vector or a numeric
+#'         two-column matrix. The lengths of \code{y} and \code{n} must match
+#'         the number of rows implied by \code{t}.
+#'   \item \strong{Model choice consistency}:
+#'         \itemize{
+#'           \item For vector \code{t}, supply exactly one of \code{pi_t} or
+#'                 \code{catalytic_model_type} (not both).
+#'           \item Supply exactly one of \code{foi_t} or
+#'                 \code{foi_functional_form} (not both).
+#'           \item Provide at least one of \code{pi_t}, \code{group_pi}, or
+#'                 \code{catalytic_model_type}. If \code{catalytic_model_type}
+#'                 is provided, do not also provide \code{pi_t} or
+#'                 \code{group_pi}.
+#'         }
+#'   \item \strong{Function signatures}: If provided, \code{pi_t} and
+#'         \code{foi_t} must accept arguments \code{(t, par)}; \code{group_pi}
+#'         and \code{group_foi} must accept \code{(a, b, par)}.
+#'         A warning is issued if \code{group_foi} is provided while \code{t}
+#'         is not a two-column matrix.
+#'   \item \strong{Allowed values}: \code{foi_functional_form} and
+#'         \code{catalytic_model_type} must be among the allowed sets listed
+#'         above. If \code{foi_functional_form == "Splines"}, then
+#'         \code{catalytic_model_type} must be either \code{"SimpleCatalytic"}
+#'         or \code{"WaningImmunity"}.
+#'   \item \strong{Initial values}: When any user-supplied modelling functions
+#'         are provided, \code{par_init} must be a named numeric vector.
+#'   \item \strong{Fixed parameters}: \code{model_fixed_params} must be a list
+#'         and is required when using \code{"Griffiths"} (needs \code{tau}),
+#'         \code{"PiecewiseConstant"} (needs strictly increasing
+#'         \code{upper_cutoffs} whose maximum covers the largest age in \code{t}),
+#'         \code{"RestrictedCatalytic"} (needs \code{k}, \code{l} in \[0, 1\]),
+#'         and \code{"WaningImmunity"} (needs \code{w} as a nonnegative scalar
+#'         or \code{NA} to estimate).
+#'   \item \strong{Brent conditions}: When optimisation reduces to one free
+#'         parameter (or the constant FOI form under certain presets) and
+#'         \code{rho} is provided, Brent requires finite \code{lower} and
+#'         \code{upper} with \code{lower < upper}.
+#'   \item \strong{rho}: If provided, \code{rho} must lie in \[0, 1\], otherwise
+#'         use \code{NA} to request estimation.
+#' }
+#'
+#' On failure the function stops with a single message containing all detected
+#' problems. On success it returns \code{TRUE} invisibly.
+#'
+#' @return \code{TRUE} invisibly on success; otherwise an error is thrown. Some
+#'   validations may emit warnings.
+#'
+#' @seealso \code{\link{FoiFromCatalyticModel}}, \code{\link{set_pi_t}},
+#'   \code{\link{set_foi_t}}, \code{\link{set_group_pi}}, \code{\link{set_group_foi}}
+#'
+#' @keywords internal
+#' @noRd
 check_inputs <- function(t, y, n, pi_t = NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init = NA, rho = 1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, lower = -Inf, upper = Inf) {
 
   errors  <- character()

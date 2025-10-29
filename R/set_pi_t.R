@@ -1,38 +1,78 @@
-#' Create Prevalence Function \eqn{\pi(t)} for a Given Catalytic Model Type
+#' Create a prevalence function \eqn{\pi(t)} for a chosen catalytic form (helper)
 #'
-#' Returns a function \eqn{\pi(t, \theta)} that computes the modelled prevalence
-#' at age \code{t} for the specified catalytic model type and parameters.
+#' Returns a function \code{pi_t(t, par)} that computes modelled prevalence at
+#' age \code{t} for the specified \code{catalytic_model_type} and
+#' \code{foi_functional_form}. This is a helper used internally by
+#' \code{\link{FoiFromCatalyticModel}}; it is not intended for direct end-user calls.
 #'
-#' @param type Character string specifying the model type. Supported types are:
+#' Supported combinations (as implemented here):
 #' \itemize{
-#'   \item \code{"MuenchGeneral"} – General Muench model with \eqn{k}, \eqn{l}, and FOI as parameters.
-#'   \item \code{"MuenchRestricted"} – Muench model with fixed \eqn{k} and \eqn{l}, estimating FOI only.
-#'   \item \code{"Griffiths"} – Griffiths model with FOI defined piecewise before and after \eqn{\tau}.
-#'   \item \code{"Farringtons"} – Farrington’s model with parameters \eqn{\gamma_0}, \eqn{\gamma_1}, \eqn{\gamma_2}.
-#'   \item \code{"PiecewiseConstant"} – Piecewise-constant FOI model defined over fixed age intervals.
-#' }
-#' @param model_fixed_params Optional named list of fixed parameters required by some models:
-#' \itemize{
-#'   \item For \code{"MuenchRestricted"}: \code{k}, \code{l}.
-#'   \item For \code{"Griffiths"}: \code{tau}.
-#'   \item For \code{"PiecewiseConstant"}: \code{upper_cutoffs} (numeric vector of upper age bounds).
+#'   \item \code{OriginalCatalytic + Constant}: \eqn{\pi(t)=k\{\,l-\exp(-\lambda t)\,\}}, uses \code{par[["k"]]}, \code{par[["l"]]}, \code{par[["foi"]]}.
+#'   \item \code{RestrictedCatalytic + Constant}: same form with fixed \code{k,l} from \code{model_fixed_params}.
+#'   \item \code{SimpleCatalytic + Griffiths}: linear FOI after \eqn{\tau}, \eqn{\lambda(t)=\gamma_0(t+\gamma_1)}; integrates piecewise.
+#'   \item \code{SimpleCatalytic + Farringtons}: damped linear FOI
+#'         \eqn{(\gamma_0 t-\gamma_1)\exp(-\gamma_2 t)+\gamma_1} with a closed-form \eqn{\pi(t)}.
+#'   \item \code{SimpleCatalytic + PiecewiseConstant}: piecewise \eqn{\lambda} over
+#'         \code{model_fixed_params$upper_cutoffs}; expects one FOI per piece in \code{par}
+#'         (entries named \code{"rho"} are ignored).
+#'   \item \code{SimpleCatalytic_NegativeCorrected + Linear}: FOI \eqn{\lambda(t)=mt+c} with
+#'         sign handling; splits at zero crossings (roots) found via
+#'         \code{rootSolve::uniroot.all} and accumulates only positive-FOI segments
+#'         using \code{group_foi}.
+#'   \item \code{OriginalCatalytic}, \code{SimpleCatalytic}, \code{RestrictedCatalytic}
+#'         (generic fallback): \eqn{\pi(t)=1-\exp\{-\int_0^t \lambda(x)\,dx\}} or its
+#'         \code{k,l} analogue, evaluated with \code{stats::integrate}.
+#'   \item \code{WaningImmunity} (and \code{WaningImmunity_NegativeCorrected}):
+#'         \eqn{\pi(t)=1-\big[\exp(-\int_0^t(\lambda+w)) + w\int_0^t \exp(-\int_u^t(\lambda+w))\,du\big]},
+#'         where \code{w} is provided in \code{model_fixed_params$w} or as \code{par[["w"]]}.
 #' }
 #'
-#' @return A function \code{pi_t(t, par)} where:
-#' \itemize{
-#'   \item \code{t} is a numeric vector of ages.
-#'   \item \code{par} is a numeric vector of model parameters to be estimated.
-#'   \item The returned value is the modelled prevalence at each age in \code{t}.
-#' }
-#' If the \code{type} is not recognised, returns \code{NA}.
+#' \strong{Note on \eqn{\tau} gating:} In all branches here, if \code{t < tau} the function
+#' returns \code{1} (maternal antibodies), i.e. \eqn{\pi(t)=1} for \eqn{t<\tau}.
+#'
+#' @param catalytic_model_type Character. Model family (e.g., \code{"OriginalCatalytic"},
+#'   \code{"RestrictedCatalytic"}, \code{"SimpleCatalytic"},
+#'   \code{"SimpleCatalytic_NegativeCorrected"}, \code{"WaningImmunity"},
+#'   \code{"WaningImmunity_NegativeCorrected"}).
+#' @param foi_functional_form Character. One of \code{"Constant"}, \code{"Linear"},
+#'   \code{"Griffiths"}, \code{"Farringtons"}, \code{"PiecewiseConstant"}.
+#'   (Spline-based prevalence is handled elsewhere; this helper does not create a spline \code{pi_t}.)
+#' @param model_fixed_params Optional named list of fixed values required by some forms:
+#'   \itemize{
+#'     \item \code{RestrictedCatalytic}: \code{list(k = ..., l = ...)}
+#'     \item \code{Griffiths}: \code{list(tau = ...)}
+#'     \item \code{PiecewiseConstant}: \code{list(upper_cutoffs = numeric())}
+#'     \item \code{WaningImmunity*}: \code{list(w = ...)} if \code{w} is known
+#'   }
+#' @param foi_t Optional FOI function \code{foi_t(t, par)} used by the fallback
+#'   integral forms and by the negative-corrected linear variant.
+#' @param tau Numeric. Maternal-antibody threshold; this helper returns \code{1} for
+#'   \code{t < tau} in all branches.
+#'
+#' @return A function \code{pi_t(t, par)} returning prevalence for each \code{t}.
+#'   For piecewise forms, \code{par} should contain one FOI value per piece in the same
+#'   order as \code{upper_cutoffs} (names optional). Entries named \code{"rho"} are ignored.
+#'   For waning-immunity forms, \code{w} must be supplied in \code{model_fixed_params}
+#'   or as \code{par[["w"]]}.
 #'
 #' @details
-#' The returned function implements the prevalence model \eqn{\pi(t)} corresponding to the
-#' specified catalytic model type. For \code{"PiecewiseConstant"}, prevalence is computed
-#' as \eqn{1 - \exp(-\sum \lambda_i \cdot L_i)}, where \eqn{\lambda_i} is the FOI in each interval
-#' and \eqn{L_i} is the overlap of age \code{t} with that interval.
+#' \itemize{
+#'   \item \strong{Integral forms}: use \code{stats::integrate}; numerical tolerances are left at defaults.
+#'   \item \strong{Negative-corrected linear}: roots are found on \code{c(0, t]} via
+#'         \code{rootSolve::uniroot.all}; only segments where \eqn{\lambda(t)>0} contribute.
+#'   \item \strong{PiecewiseConstant}: prevalence is \eqn{1-\exp(-\sum_i \lambda_i L_i(t))}, where
+#'         \eqn{L_i(t)} is the overlap length of \code{t} with piece \code{i} after applying \code{tau}.
+#' }
 #'
-#' @export
+#' @note Helper for \code{\link{FoiFromCatalyticModel}}; consider leaving it unexported.
+#'
+#' @seealso \code{\link{FoiFromCatalyticModel}}, \code{\link{set_group_pi}},
+#'   \code{\link{set_foi_t}}
+#'
+#' @keywords internal
+#' @importFrom stats integrate
+#' @importFrom rootSolve uniroot.all
+#' @noRd
 set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, foi_t=NULL, tau=0) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (!is.na(foi_functional_form) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
@@ -277,7 +317,7 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
         vapply(x, function(xi) f(xi, ...), numeric(1))
       }
     }
-    par <- par[ names(par) != "rho" ]
+    par <- par[ !(names(par) %in% c("rho", "k", "l", "w")) ]
     upper_cutoffs <- model_fixed_params$upper_cutoffs
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
     w <- model_fixed_params$w  # seroreversion rate

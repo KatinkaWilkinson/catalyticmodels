@@ -1,50 +1,76 @@
-#' Create Group Probability of Infection Function
+#' Create a group prevalence function over \[a, b) (helper)
 #'
-#' Returns a function that computes the average probability of infection
-#' between two ages \code{a} and \code{b}, based on the specified model type.
-#' This is often used in catalytic models for age-stratified infection data.
+#' Returns a function that computes the mean prevalence \eqn{\bar\pi_{[a,b)}} over
+#' an age interval \[a, b) for a chosen catalytic-model form. This helper is used
+#' internally by \code{\link{FoiFromCatalyticModel}} and related wrappers; it is
+#' not intended for direct end-user calls.
 #'
-#' Supported model types:
+#' Supported combinations:
 #' \itemize{
-#'   \item \code{"MuenchGeneral"}: General Muench model with three parameters (\eqn{k}, \eqn{l}, \eqn{\lambda}).
-#'   \item \code{"MuenchRestricted"}: Muench model with fixed \eqn{k} and \eqn{l}, estimating only \eqn{\lambda}.
-#'   \item \code{"Griffiths"}: Griffiths model with a change point \eqn{\tau} and parameters \eqn{\gamma_0}, \eqn{\gamma_1}.
-#'   \item \code{"Farringtons"}: Farrington’s model with parameters \eqn{\gamma_0}, \eqn{\gamma_1}, \eqn{\gamma_2}.
-#'   \item \code{"PiecewiseConstant"}: Piecewise constant force of infection model with specified age cutoffs.
+#'   \item \code{OriginalCatalytic + Constant} (with \code{tau == 0}) — closed form using
+#'         \code{par[["k"]]}, \code{par[["l"]]}, \code{par[["foi"]]}.
+#'   \item \code{RestrictedCatalytic + Constant} — uses fixed \code{k}, \code{l} from
+#'         \code{model_fixed_params} and estimates \code{foi}; supports simple \code{tau} gating.
+#'   \item \code{SimpleCatalytic + Constant} (with \code{tau == 0}) — closed form for mean prevalence.
+#'   \item \code{SimpleCatalytic_NegativeCorrected + Linear} (with \code{tau == 0}) —
+#'         integrates \code{1 - exp(-m t^2/2 - c t)}; uses \code{stats::pnorm} for \emph{erf}
+#'         and \code{pracma::erfi} for \emph{erfi}. Returns 0 when the implied FOI is negative
+#'         across \[a, b); splits at the root if the sign changes inside the interval.
+#'   \item \code{SimpleCatalytic + Farringtons} (with \code{tau == 0}) — integrates a closed-form
+#'         \eqn{\pi(t)} implied by the FOI \eqn{( \gamma_0 t - \gamma_1 ) e^{-\gamma_2 t} + \gamma_1};
+#'         guarded when \eqn{\gamma_2 \approx 0}. On numeric failure returns \code{NA}.
+#'   \item \code{SimpleCatalytic + PiecewiseConstant} — length-weighted average across overlapping
+#'         piecewise intervals \[a_i, b_i) from \code{model_fixed_params$upper_cutoffs}. Parameter
+#'         entries named \code{"rho"}, \code{"k"}, \code{"l"}, \code{"w"} are ignored when forming the
+#'         per-piece FOIs.
 #' }
 #'
-#' @param type Character string specifying the model type. Must be one of:
-#'   \code{"MuenchGeneral"}, \code{"MuenchRestricted"}, \code{"Griffiths"},
+#' Fallback: if no specific form matches and \code{pi_t} is provided, the helper
+#' returns a function that computes \code{(1/(b-a)) * integrate(function(x) pi_t(x, par), a, b)}.
+#'
+#' @param catalytic_model_type Character. Model family (e.g., \code{"OriginalCatalytic"},
+#'   \code{"RestrictedCatalytic"}, \code{"SimpleCatalytic"}, \code{"SimpleCatalytic_NegativeCorrected"}).
+#' @param foi_functional_form Character. One of \code{"Constant"}, \code{"Linear"},
 #'   \code{"Farringtons"}, \code{"PiecewiseConstant"}.
-#' @param model_fixed_params List of fixed parameters required by the chosen model type.
-#'   For example:
+#' @param model_fixed_params Optional named list of fixed settings required by some forms:
 #'   \itemize{
-#'     \item MuenchRestricted: \code{list(k = ..., l = ...)}
-#'     \item Griffiths: \code{list(tau = ...)}
-#'     \item PiecewiseConstant: \code{list(upper_cutoffs = ...)}
+#'     \item \code{RestrictedCatalytic}: \code{list(k = ..., l = ...)}
+#'     \item \code{PiecewiseConstant}: \code{list(upper_cutoffs = numeric())} — ascending upper bounds per piece
+#'   }
+#' @param pi_t Optional function \code{pi_t(t, par)} used by the generic integration fallback
+#'   when no closed-form/specific method is selected.
+#' @param tau Numeric. Age threshold for gating. Behavior is model-specific in this helper:
+#'   \itemize{
+#'     \item In the \code{RestrictedCatalytic + Constant} branch, intervals entirely below \code{tau} return 0.
+#'     \item In the \code{PiecewiseConstant} and generic fallback branches, the segment \[a, \min(b,\tau)) is
+#'           treated as having \code{pi(t) = 1}, so the average over \[a, b) includes a contribution
+#'           of \code{(\tau - a)} when \code{a < \tau < b}.
 #'   }
 #'
-#' @return A function \code{group_pi(a, b, par)} where:
-#'   \itemize{
-#'     \item \code{a} is the lower age bound.
-#'     \item \code{b} is the upper age bound.
-#'     \item \code{par} is a numeric vector of model parameters to be estimated.
-#'   }
-#'   The returned function computes the average infection probability over \eqn{[a, b]}.
+#' @return A function \code{group_pi(a, b, par)} that returns the mean prevalence over \[a, b).
+#'   For piecewise models, \code{par} should contain one FOI value per piecewise interval (names optional),
+#'   with entries named \code{"rho"}, \code{"k"}, \code{"l"}, \code{"w"} ignored in the computation.
+#'   On numeric integration errors, \code{NA} may be returned.
 #'
 #' @details
-#' For some models, the computation involves:
 #' \itemize{
-#'   \item Analytical formulas (\code{MuenchGeneral}, \code{MuenchRestricted}, \code{Griffiths}).
-#'   \item Numerical integration (\code{Farringtons}).
-#'   \item Stepwise integration over defined age intervals (\code{PiecewiseConstant}).
+#'   \item \strong{PiecewiseConstant}: the mean is a length-weighted average over overlaps
+#'         with \[a, b). Overlap lengths are computed with \code{pmax/pmin}; negatives are clamped to 0.
+#'   \item \strong{Farringtons}: mean prevalence is obtained by integrating a closed-form \eqn{\pi(t)};
+#'         implemented with \code{\link[stats]{integrate}} and guarded for small \eqn{\gamma_2}.
+#'   \item \strong{Linear (Negative-corrected)}: uses \emph{erf}/\emph{erfi} primitives; requires
+#'         \pkg{pracma} for \code{erfi}. The result is 0 if the implied FOI is negative throughout \[a, b).
 #' }
 #'
-#' The Griffiths model implementation uses the error function via \code{pnorm},
-#' and Farrington's model uses \code{\link[stats]{integrate}} with error handling.
+#' @note Helper for \code{\link{FoiFromCatalyticModel}}; not intended for independent use.
+#'       Consider leaving this function unexported. If exported for advanced users,
+#'       treat it as internal API subject to change.
 #'
+#' @seealso \code{\link{FoiFromCatalyticModel}}, \code{\link{set_group_foi}}, \code{\link{set_foi_t}}
+#'
+#' @keywords internal
 #' @importFrom stats pnorm integrate
-#' @export
+#' @noRd
 set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t = NULL, tau=0) { # type is a string, model_fixed_params is a list
     if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant" && tau == 0) {
       group_pi <- function(a, b, par) {
@@ -280,7 +306,7 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
         #
 
         integrand <- function(t, par) {
-          foi_pieces <- unname(par[names(par) != "rho"])
+          foi_pieces <- unname(par[ !(names(par) %in% c("rho", "k", "l", "w")) ])
           sapply(t, function(tt) {
             interval_lengths <- pmax(pmin(tt, upper_cutoffs) - pmax(lower_cutoffs, tau), 0)
             cum_foi <- sum(foi_pieces * interval_lengths)

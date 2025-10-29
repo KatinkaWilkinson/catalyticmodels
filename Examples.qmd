@@ -41,9 +41,9 @@ true_foi_wan <- waning.sample.15yrs$dCFOI
 
 ## Non-parametric examples
 ```{r}
-Splines_LifelongImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=1)
+Splines_LifelongImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=8)
 
-Splines_WaningImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", boot_num=1, model_fixed_params = list(w=1/15))
+Splines_WaningImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", boot_num=8, model_fixed_params = list(w=1/15))
 
 plotFOI(list(lifelong=Splines_LifelongImmunity, waning=Splines_WaningImmunity), from=0, to=60, true_foi = list(foi=true_foi, t=t))
 ```

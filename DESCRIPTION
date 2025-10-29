@@ -1,18 +1,22 @@
 Package: catalyticmodels
-Title: What the Package Does (One Line, Title Case)
+Title: Fitting catalytic models for age-specific force of infection and R0 from seroprevalence in R
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Katinka", "Wilkinson", , "katinka.wilkinson@gmail.com", role = c("aut", "cre"))
+Description: catalyticmodels is an R package for estimating the age-specific force of infection (FOI) and the basic reproduction number (R0) from cross-sectional seroprevalence data. This package has been designed to accommodate both specific age data as well as age-grouped data. The package implements widely used FOI formulations: constant, linear, exponentially damped linear, piecewise-constant, and a cubic B-spline-based option. It also supports common practicalities such as imperfect assay sensitivity, maternal antibodies, and waning immunity, and it reports uncertainty via bootstrapping. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 URL: https://github.com/KatinkaWilkinson/catalyticmodels
 BugReports: https://github.com/KatinkaWilkinson/catalyticmodels/issues
-Imports: 
-    Iso,
+Imports:
     future,
     future.apply,
+    parallel,
     ggplot2,
-    stats
+    stats,
+    utils,
+    pracma,
+    rootSolve
+

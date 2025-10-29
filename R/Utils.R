@@ -1,4 +1,4 @@
-#' Generate Bootstrap Resamples from Grouped Binary Serological Data
+#' Generate Bootstrap Resamples from Grouped Binary Serological Data (helper)
 #'
 #' Efficiently generates bootstrap resamples of seropositive counts using grouped binary data derived from count data.
 #' The input \code{t} can either be a vector of exact ages or a matrix representing age intervals (e.g., \[a, b\] per row).
@@ -38,7 +38,7 @@
 #'
 #' @importFrom future plan multisession
 #' @importFrom future.apply future_lapply
-#' @export
+#' @noRd
 create_boot_samps <- function(t, y, n, num_boot) {
   stopifnot(requireNamespace("future.apply", quietly = TRUE))
   future::plan(future::multisession)
@@ -63,6 +63,42 @@ create_boot_samps <- function(t, y, n, num_boot) {
   return(boot_list)
 }
 
+#' Negative total binomial log-likelihood (helper)
+#'
+#' Computes the negative log-likelihood for binomial seroprevalence counts,
+#' given a prevalence model \code{pi_t()} (for exact-age data) or
+#' \code{group_pi()} (for age-interval data). Used internally by
+#' \code{FoiFromCatalyticModel()} during maximum-likelihood estimation.
+#'
+#' @param par Named numeric vector of model parameters. If names are missing,
+#'   they are assigned from \code{param_names}.
+#' @param pi_t Function \code{pi_t(t, par)} returning point prevalence at age \code{t}.
+#' @param group_pi Function \code{group_pi(a, b, par)} returning average prevalence on \eqn{[a, b)}.
+#' @param group_foi Unused here (kept for a consistent signature with other helpers).
+#' @param t Numeric vector of ages, or a two-column matrix of age intervals \eqn{[a, b)}.
+#' @param y Integer vector of observed seropositive counts per age (or age group).
+#' @param n Integer vector of totals tested per age (or age group).
+#' @param rho Numeric scalar or \code{NA}. If \code{NA}, an estimated \code{rho}
+#'   is taken from \code{par["rho"]}; otherwise the supplied scalar is used.
+#' @param param_names Character vector of parameter names to use if \code{par}
+#'   arrives unnamed (e.g., from \code{optim}).
+#'
+#' @details
+#' The routine:
+#' \enumerate{
+#'   \item Builds \code{pi} via \code{pi_t()} for exact-age input, or
+#'         via \code{group_pi()} for interval input.
+#'   \item Applies the test-adjustment multiplicatively: \eqn{p = \rho \cdot \pi}.
+#'   \item Bounds \eqn{p} to \eqn{[1e-8, 1-1e-8]} for numerical stability.
+#'   \item Returns \code{-sum(dbinom(y, n, p, log = TRUE))}.
+#' }
+#' If the total log-likelihood is non-finite, a large penalty (\code{1e6}) is returned.
+#'
+#' @return Numeric scalar: the negative log-likelihood.
+#'
+#' @keywords internal
+#' @importFrom stats dbinom
+#' @noRd
 neg_total_binom_loglik <- function(par, pi_t, group_pi, group_foi, t, y, n, rho, param_names) {
   if (is.null(names(par))) {names(par) <- param_names} # putting this in because optim drops the names!
 

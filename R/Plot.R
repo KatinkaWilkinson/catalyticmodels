@@ -1,147 +1,103 @@
-#' Plot Force of Infection Estimates from Catalytic Models
+#' Plot Force of Infection (FOI) curves from fitted catalytic models
 #'
-#' Creates a line plot (optionally with confidence intervals) of the
-#' estimated force of infection (FOI) from one or more fitted catalytic
-#' models over a specified age range.
+#' Produces a line plot of estimated force of infection (FOI) over age for one
+#' or more fitted catalytic models, with optional bootstrap confidence ribbons
+#' and optional bars for a known/true FOI by age interval.
 #'
-#' @param cat_models A fitted catalytic model object, or a named list of such objects.
-#'   Each model must contain:
+#' @param cat_models A single fitted catalytic model object or a named list of such
+#'   objects. Each model is expected to provide:
 #'   \itemize{
-#'     \item `foi_t`: a function taking a vector of ages and a parameter vector, returning FOI estimates.
-#'     \item `params_MLE`: a vector of maximum likelihood estimates for model parameters.
-#'     \item `params_CI`: (optional) a list of confidence intervals for parameters, where each element is a numeric vector \[lower, upper\].
+#'     \item \code{foi_t}: function mapping ages and parameters to FOI, e.g. \code{function(t, par) \{...\}}.
+#'     \item \code{params_MLE}: named numeric vector (or list) of MLE parameters.
+#'     \item \code{bootparams}: (required if \code{confint = TRUE} and non-spline) a matrix of
+#'       bootstrap parameter draws, one row per bootstrap.
+#'     \item \code{spline_pi_t}: (spline models only) a \code{smooth.spline} fit used by \code{foi_t}.
+#'     \item \code{boot_spline_pi_t}: (optional, spline CIs) list of \code{smooth.spline} fits,
+#'       one per bootstrap. If absent, ribbons are omitted for spline models even when \code{confint = TRUE}.
 #'   }
-#' @param from Numeric scalar. Lower bound of the age range for plotting.
-#' @param to Numeric scalar. Upper bound of the age range for plotting.
-#' @param confint Logical. If `TRUE`, plots shaded confidence intervals based on `params_CI`.
+#'   If \code{cat_models} is unnamed, legend labels are auto-generated as
+#'   \code{"Model 1"}, \code{"Model 2"}, etc.
+#' @param from,to Numeric scalars. Age range to evaluate and plot (inclusive).
+#' @param confint Logical. If \code{TRUE}, draws 95\% ribbons from bootstrap
+#'   percentiles. For non-spline models, FOI is recomputed for each age grid point
+#'   using rows of \code{bootparams}. For spline models, ribbons are shown only when
+#'   \code{boot_spline_pi_t} is supplied.
+#' @param true_foi Optional. A list or data frame with components
+#'   \code{t} (a two-column matrix of age intervals \[a, b\]) and
+#'   \code{foi} (numeric of the same length) to draw semi-transparent rectangles
+#'   indicating a known/true FOI per interval.
+#' @param line_colors Optional. Either (i) a named character vector of colors where
+#'   names match \code{names(cat_models)}, or (ii) an unnamed vector recycled across
+#'   models. If omitted, a colorblind-friendly HCL palette (when available) is used.
+#' @param xmin,ymin,xmax,ymax Numeric limits passed to \code{coord_cartesian()}.
+#'   Use \code{NA} for any bound you want ggplot2 to choose from the data.
+#' @param true_fill Fill color for the \code{true_foi} rectangles (default \code{"grey80"}).
 #'
-#' @return A \code{ggplot2} object showing the FOI curves for the provided model(s).
+#' @return A \code{ggplot} object showing FOI curves (and ribbons/rectangles if requested).
 #' @export
 #'
-#' @examples
-#' # Example using a hypothetical catalytic model object `my_model`
-#' # plot_foi_grid(my_model, from = 0, to = 50, confint = TRUE)
+#' @details
+#' \itemize{
+#'   \item FOI is evaluated on an internal grid of 100 ages from \code{from} to \code{to}.
+#'   \item Ribbons use the 2.5\% and 97.5\% quantiles at each grid point.
+#'   \item For spline models, FOI is computed via \code{foi_t(t, spline_pi_t)}.
+#'   \item For non-spline models, FOI is computed via \code{foi_t(t, params_MLE)}.
+#' }
 #'
-#' @importFrom ggplot2 ggplot aes geom_line geom_ribbon labs theme_minimal
-
-# plot_foi_grid <- function(cat_models, from, to, confint = FALSE, true_foi = NA, xmin=0, ymin=0, xmax=NA, ymax=NA) {
-#
-#   # --- Safe palette helper (handles old R/grDevices) ---
-#   safe_palette <- function(n) {
-#     pals <- tryCatch(grDevices::hcl.pals(), error = function(e) character())
-#     preferred <- c("Okabe-Ito", "Dark 3", "Set 2", "Set 3", "Vibrant", "Warm")
-#     pick <- intersect(preferred, pals)
-#     if (length(pick) > 0) grDevices::hcl.colors(n, palette = pick[1]) else grDevices::rainbow(n)
-#   }
-#
-#   # Normalize input and preserve order
-#   if (!is.list(cat_models)) cat_models <- list(cat_models)
-#   if (is.null(names(cat_models))) names(cat_models) <- paste0("Model ", seq_along(cat_models))
-#   model_names <- names(cat_models)
-#
-#   plot_data <- lapply(seq_along(cat_models), function(i) {
-#     model <- cat_models[[i]]
-#     name  <- model_names[i]
-#
-#     t_grid <- seq(from, to, length.out = 100)
-#     is_spline <- !is.null(model[["spline_pi_t"]])
-#
-#     # Baseline FOI curve
-#     foi_grid <- if (is_spline) {
-#       model$foi_t(t_grid, model$spline_pi_t)
-#     } else {
-#       model$foi_t(t_grid, unlist(model$params_MLE))
-#     }
-#
-#     # Confidence intervals
-#     if (isTRUE(confint)) {
-#       if (is_spline) {
-#         if (!is.null(model$boot_spline_pi_t) && is.list(model$boot_spline_pi_t)) {
-#           foi_CI <- matrix(NA_real_, nrow = length(t_grid), ncol = 2)
-#           for (k in seq_along(t_grid)) {
-#             t <- t_grid[k]
-#             boot_fois <- vapply(model$boot_spline_pi_t, function(f) model$foi_t(t, f), numeric(1))
-#             foi_CI[k, ] <- as.numeric(quantile(boot_fois, probs = c(0.025, 0.975), na.rm = TRUE))
-#           }
-#           colnames(foi_CI) <- c("lower", "upper")
-#           data.frame(age = t_grid, foi = foi_grid,
-#                      foi_lower = foi_CI[, "lower"], foi_upper = foi_CI[, "upper"],
-#                      model = name, row.names = NULL)
-#         } else {
-#           data.frame(age = t_grid, foi = foi_grid, model = name, row.names = NULL)
-#         }
-#       } else {
-#         stopifnot(!is.null(model$bootparams))
-#         foi_CI <- matrix(ncol = 2, nrow = length(t_grid))
-#         for (k in seq_along(t_grid)) {
-#           t <- t_grid[k]
-#           boot_fois <- apply(model$bootparams, 1, function(x) model$foi_t(t, x))
-#           foi_CI[k, ] <- as.numeric(quantile(boot_fois, probs = c(0.025, 0.975)))
-#         }
-#         colnames(foi_CI) <- c("lower", "upper")
-#         data.frame(age = t_grid, foi = foi_grid,
-#                    foi_lower = foi_CI[, "lower"], foi_upper = foi_CI[, "upper"],
-#                    model = name, row.names = NULL)
-#       }
-#     } else {
-#       data.frame(age = t_grid, foi = foi_grid, model = name, row.names = NULL)
-#     }
-#   })
-#
-#   full_df <- do.call(rbind, plot_data)
-#   full_df$model <- factor(full_df$model, levels = model_names)  # preserve input order
-#
-#   p <- ggplot2::ggplot(full_df, ggplot2::aes(x = age, y = foi, color = model)) +
-#     ggplot2::geom_line(linewidth = 0.8)
-#
-#   if (isTRUE(confint) && all(c("foi_lower", "foi_upper") %in% names(full_df))) {
-#     p <- p +
-#       ggplot2::geom_ribbon(
-#         ggplot2::aes(ymin = foi_lower, ymax = foi_upper, fill = model),
-#         alpha = 0.20, color = NA
-#       )
-#   }
-#
-#   # "True" FOI overlay with legend entry FIRST
-#   have_true <- !is.na(true_foi)[1]
-#   if (have_true) {
-#     stopifnot(is.list(true_foi) || is.data.frame(true_foi))
-#     stopifnot(all(c("t", "foi") %in% names(true_foi)))
-#     df_true <- data.frame(age = true_foi$t, foi = true_foi$foi)
-#
-#     p <- p +
-#       ggplot2::geom_line(
-#         data = df_true,
-#         ggplot2::aes(x = age, y = foi, color = "True Population FOI"),
-#         inherit.aes = FALSE, linewidth = 0.9
-#       ) +
-#       ggplot2::geom_point(
-#         data = df_true,
-#         ggplot2::aes(x = age, y = foi, color = "True Population FOI"),
-#         inherit.aes = FALSE, size = 1.6
-#       )
-#   }
-#
-#   # Colors + legend order
-#   model_cols <- stats::setNames(safe_palette(length(model_names)), model_names)
-#   color_values <- if (have_true) c("True Population FOI" = "black", model_cols) else model_cols
-#   legend_breaks <- if (have_true) c("True Population FOI", model_names) else model_names
-#
-#   p +
-#     ggplot2::scale_color_manual(values = color_values, breaks = legend_breaks, name = NULL) +
-#     ggplot2::scale_fill_manual(values = model_cols, guide = "none") +
-#     ggplot2::labs(
-#       x = "Age",
-#       y = "FOI"
-#     ) +
-#     ggplot2::theme_minimal()+
-#     ggplot2::coord_cartesian(xlim = c(xmin, xmax), ylim = c(ymin, ymax))
-# }
-#
-
-
-
-
+#' @examples
+#' \dontrun{
+#' # Age-intervals and midpoints
+#' t <- matrix(
+#'   c(
+#'     0, 1,
+#'     1, 5,
+#'     5, 10,
+#'     10, 15,
+#'     15, 20,
+#'     20, 30,
+#'     30, 40,
+#'     40, 50,
+#'     50, 60
+#'   ),
+#'   ncol = 2, byrow = TRUE
+#' )
+#' t_mid <- rowMeans(t)
+#'
+#' # Observed positives and totals
+#' y <- c(28, 224, 577, 712, 740, 808, 848, 873, 894)
+#' n <- rep(1000, length(y))
+#'
+#' # True FOI by interval (rounded)
+#' true_foi <- round(c(
+#'   0.02958701, 0.06343983, 0.18413499, 0.08801705, 0.04843492,
+#'   0.03307834, 0.04797940, 0.03155037, 0.01551178
+#' ), 4)
+#'
+#' # Fit Farringtons FOI on exact-age midpoints
+#' Farrington_exactt <- FoiFromCatalyticModel(
+#'   t = t_mid,
+#'   y = y,
+#'   n = n,
+#'   catalytic_model_type = "SimpleCatalytic",
+#'   foi_functional_form = "Farringtons",
+#'   lower = c(0, 0, 0),
+#'   boot_num = 100
+#' )
+#'
+#' # Plot FOI with bootstrap ribbons and true interval FOI as rectangles
+#' plotFOI(
+#'   list(Farrington_exactt = Farrington_exactt),
+#'   from = 0, to = 60, confint=TRUE,
+#'   true_foi = list(foi = true_foi, t = t)
+#' )
+#' }
+#'
+#' @seealso \code{\link{FoiFromCatalyticModel}}
+#'
+#' @importFrom ggplot2 ggplot aes geom_line geom_ribbon geom_rect
+#' @importFrom ggplot2 labs theme_minimal scale_color_manual scale_fill_manual coord_cartesian
+#' @importFrom stats setNames
+#' @importFrom grDevices hcl.pals hcl.colors rainbow
 plotFOI <- function(
     cat_models, from, to, confint = FALSE,
     true_foi = NA,

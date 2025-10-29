@@ -1,40 +1,56 @@
-#' Create Instantaneous Force of Infection Function
+#' Create an FOI function for a chosen model (helper)
 #'
-#' Returns a function \code{foi_t(t, par)} that computes the instantaneous force
-#' of infection at age \code{t}, based on the specified model type.
+#' Returns a function that computes the instantaneous force of infection (FOI)
+#' at age \code{t} for the specified \code{foi_functional_form}. This is a
+#' helper used internally by \code{\link{FoiFromCatalyticModel}} and related
+#' wrappers; it is not intended for direct end-user calls.
 #'
-#' Supported model types:
+#' Supported forms:
 #' \itemize{
-#'   \item \code{"MuenchGeneral"} – constant FOI from the third parameter.
-#'   \item \code{"MuenchRestricted"} – constant FOI from the first parameter.
-#'   \item \code{"Griffiths"} – FOI is zero until \eqn{\tau}, then increases linearly: \eqn{\gamma_0 (t + \gamma_1)}.
-#'   \item \code{"Farringtons"} – decaying exponential plus constant term.
-#'   \item \code{"PiecewiseConstant"} – constant within age intervals defined by \code{upper_cutoffs}.
-#'   \item \code{"Splines"} – computed from a smoothed prevalence spline, using:
-#'     \eqn{\lambda(t) = \pi'(t) / \left( 1 - \pi(t) \right)}.
+#'   \item \code{"Constant"} — FOI is constant (uses \code{par[["foi"]]}), set to 0 for ages < \code{tau}.
+#'   \item \code{"Linear"} — FOI is \code{m * t + c} (uses \code{par[["m"]]}, \code{par[["c"]]}), 0 for ages < \code{tau}.
+#'   \item \code{"Griffiths"} — FOI is 0 up to \eqn{\tau} then \eqn{\gamma_0 (t + \gamma_1)}; requires \code{model_fixed_params$tau}.
+#'   \item \code{"Farringtons"} — \eqn{( \gamma_0 t - \gamma_1 ) e^{-\gamma_2 t} + \gamma_1}, 0 for ages < \code{tau}.
+#'   \item \code{"PiecewiseConstant"} — Constant within intervals \[a, b), from \code{model_fixed_params$upper_cutoffs}.
+#'   \item \code{"Splines"} + \code{catalytic_model_type == "SimpleCatalytic"} — \eqn{\lambda(t) = \pi'(t)/(1-\pi(t))}.
+#'   \item \code{"Splines"} + \code{catalytic_model_type == "WaningImmunity"} — \eqn{\lambda(t) = \{\pi'(t)+w\,\pi(t)\}/(1-\pi(t))}, requires \code{model_fixed_params$w}.
 #' }
 #'
-#' @param type Character string specifying the model type.
-#' @param model_fixed_params Optional named list of fixed parameters required by certain models:
+#' @param catalytic_model_type Character. Model family (e.g., \code{"SimpleCatalytic"}, \code{"WaningImmunity"})
+#'   used to disambiguate spline variants.
+#' @param foi_functional_form Character. One of \code{"Constant"}, \code{"Linear"}, \code{"Griffiths"},
+#'   \code{"Farringtons"}, \code{"PiecewiseConstant"}, \code{"Splines"}.
+#' @param model_fixed_params Optional named list for required settings in some forms:
 #'   \itemize{
-#'     \item \code{"Griffiths"}: \code{list(tau = ...)}
-#'     \item \code{"PiecewiseConstant"}: \code{list(upper_cutoffs = ...)}
+#'     \item \code{Griffiths}: \code{list(tau = ...)}
+#'     \item \code{PiecewiseConstant}: \code{list(upper_cutoffs = numeric())} — ascending upper bounds per interval
+#'     \item \code{WaningImmunity + Splines}: \code{list(w = ...)}
 #'   }
+#' @param tau Numeric. Age threshold; FOI is set to 0 for ages < \code{tau} in \code{Constant}, \code{Linear},
+#'   \code{Farringtons}, and \code{PiecewiseConstant}. For \code{Griffiths}, \code{model_fixed_params$tau} is used.
 #'
-#' @return A function \code{foi_t(t, par)} (or \code{foi_t(t, spline_pi_t)} for splines), where:
+#' @return A function:
 #' \itemize{
-#'   \item \code{t} is age (numeric vector).
-#'   \item \code{par} is a numeric vector of model parameters.
-#'   \item The returned value is the instantaneous FOI at each age in \code{t}.
+#'   \item Analytic forms: \code{foi_t(t, par)} where \code{par} is a named vector.
+#'   \item Spline forms: \code{foi_t(t, spline_pi_t)} where \code{spline_pi_t} is a \code{\link[stats]{smooth.spline}} fit.
 #' }
-#' If \code{foi_functional_form} is unrecognised, returns \code{NA}.
+#' If the combination is unrecognised, returns \code{NA}.
 #'
 #' @details
-#' For spline-based models, FOI is calculated as the derivative of the prevalence spline divided by
-#' \eqn{1 - \pi(t)} (capped to avoid division by zero). This ensures the FOI is well-defined for all \code{t}.
-#' Base R functions like \code{ifelse}, \code{findInterval}, and \code{pmin} are used, so no special imports are required.
+#' Spline forms use \code{\link[stats]{predict}} for \eqn{\pi(t)} and \eqn{\pi'(t)}; \eqn{\pi(t)} is capped below 1 to
+#' avoid division by zero. For \code{PiecewiseConstant}, intervals are treated as \code{[a, b)} and \code{par} must
+#' supply one FOI per interval in the same order as \code{upper_cutoffs}.
 #'
-#' @export
+#' @note Helper for \code{\link{FoiFromCatalyticModel}}; not intended for independent use.
+#'       Consider not exporting this function. If you keep it exported for advanced users,
+#'       treat it as internal API subject to change.
+#'
+#' @seealso \code{\link{FoiFromCatalyticModel}}, \code{\link{FoiFromCatalyticModel_unparallelised}}
+#'
+#' @keywords internal
+#'
+#' @importFrom stats predict
+#' @noRd
 set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, tau = 0) { # foi_functional_form is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (foi_functional_form == "Constant") {
