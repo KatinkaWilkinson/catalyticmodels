@@ -92,7 +92,9 @@ ggsave("ResultsPlots/ResultPlot_assay_sensitivity_noCI.png", plot = ResultPlot_a
 
 Farrington_rho1$foi_MLE
 ```
+
 #AIC vals
+
 ```{r}
 AIC_rho1 <- Farrington_rho1$AIC
 AIC_rho0.9 <- Farrington_rho0.9$AIC
@@ -112,6 +114,7 @@ aic_tbl <- tibble(
 aic_tbl
 
 ```
+
 ```{r}
 library(ggplot2)
 library(dplyr)
@@ -202,6 +205,7 @@ gg <- ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
 gg
 
 ```
+
 ```{r}
 library(ggplot2)
 library(dplyr)
@@ -274,6 +278,7 @@ ggplot(plot_df, aes(x = age, y = foi, fill = model)) +
   )
 
 ```
+
 ```{r}
 library(ggplot2)
 library(dplyr)
@@ -454,6 +459,7 @@ ggsave("varying_rho_plot.png", gg, width=7, height=4)
 ```
 
 # Seroprevalence plots
+
 ```{r}
 Observed_seroprev <- y_rho0.9/n_rho0.9
 Farrington1_seroprev <- Observed_seroprev
@@ -691,8 +697,6 @@ p
 
 ```
 
-
-
 ## How precisely does one need to know waning rates?
 
 -   3 scenarios: lifelong immunity, 10 year waning rate, 15 year waning rate o For each: fit splines (w=0, w=10, w=15) and Farrington (w=0, w=10, w=15)
@@ -872,6 +876,7 @@ combined_foi_plots_v2
 ggsave("waning_plot_v2.png", combined_foi_plots_v2,
        width = 9, height = 5, dpi = 300)
 ```
+
 ```{r}
 # Splines — dark→light GREEN (ColorBrewer "Greens"-style)
 my_cols_splines <- c(
@@ -941,6 +946,7 @@ ggsave("waning_plots.png", combined_foi_plots_v4, width=7.5, height=4)
 ```
 
 ### AIC values for waning plots
+
 ```{r}
 # for simulated ground truth omega = 0
 AIC_Farrington_w0_truew0 <- Farrington_w0_truew0$AIC
@@ -1106,6 +1112,7 @@ t(no.waning.sample.EIR$y.sim)
 ```
 
 # mean simulation plots
+
 ```{r}
 Constant_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_RestrictedCatalytic_Constant_2025-09-29_15-23-01.rds")
 Constant_mods <- lapply(Constant_mods, function(m) {
@@ -1348,7 +1355,9 @@ p
 # ggsave("mean_foi_exp_damped_rho_compare.png", p, width = 9, height = 4, dpi = 300)
 
 ```
+
 ## version with CIs
+
 ```{r}
 library(ggplot2)
 
@@ -1459,6 +1468,7 @@ p
 # ggsave("mean_foi_exp_damped_q95_ribbons.png", p, width = 9, height = 4, dpi = 300)
 
 ```
+
 ```{r}
 t_grid <- seq(0, 60, length.out = 400)
 
@@ -1623,7 +1633,9 @@ p3
 ggsave("mean_foi_splines_lifelong_vs_waning.png", p3, width = 7, height = 4, dpi = 300)
 
 ```
+
 #R0
+
 ```{r}
 Constant_mods <- readRDS("Finished Model Runs (1000 population samples)/pop1_RestrictedCatalytic_Constant_2025-09-29_15-23-01.rds")
 Constant_mods <- lapply(Constant_mods, function(m) {

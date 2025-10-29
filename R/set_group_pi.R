@@ -45,8 +45,8 @@
 #'
 #' @importFrom stats pnorm integrate
 #' @export
-set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t = NULL) { # type is a string, model_fixed_params is a list
-    if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant") {
+set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t = NULL, tau=0) { # type is a string, model_fixed_params is a list
+    if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "OriginalCatalytic" && foi_functional_form == "Constant" && tau == 0) {
       group_pi <- function(a, b, par) {
         k <- par[["k"]]
         l <- par[["l"]]
@@ -56,25 +56,39 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       }
     }
 
-    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant" && tau == 0) {
       k <- model_fixed_params$k
       l <- model_fixed_params$l
-      group_pi <- function(a, b, par) {
-        foi <- par[["foi"]]
-        return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
-        # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
+      if (tau > 0) {
+        group_pi <- function(a, b, par) {
+          foi <- par[["foi"]]
+          if (b < tau) {
+            return(0)
+          } else if (a < tau) {
+            if (foi < 1e-6) foi <- 1e-6
+            return(k*(l-(exp(-foi * tau) - exp(-foi * b)) / (foi * (b - a))))
+          } else {
+            if (foi < 1e-6) foi <- 1e-6
+            return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
+          }
+        }
+      } else {
+        group_pi <- function(a, b, par) {
+          foi <- par[["foi"]]
+          return(k*(l-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a))))
+        }
       }
     }
 
-  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Constant") {
+  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Constant" && tau == 0) {
     group_pi <- function(a, b, par) {
       foi <- par[["foi"]]
       return(1-(exp(-foi * a) - exp(-foi * b)) / (foi * (b - a)))
       # return(k * ((exp(-b * foi) * (b * l * foi * exp(b * foi) + 1)) / foi - (exp(-a * foi) * (a * l * foi * exp(a * foi) + 1)) / foi)) / (b - a)
     }
-  }
+}
 
-  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic_NegativeCorrected" && foi_functional_form == "Linear") {
+  else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic_NegativeCorrected" && foi_functional_form == "Linear" && tau == 0) {
     group_pi <- function(a, b, par) {
       m <- par[["m"]]
       c <- par[["c"]]
@@ -146,48 +160,96 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
     }
   }
 
-    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
-      tau <- model_fixed_params$tau
-      group_pi <- function(a, b, par) {
-        gamma0 <- par[["gamma0"]]
-        gamma1 <- par[["gamma1"]]
+    # else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
+    #   tau <- model_fixed_params$tau
+    #   group_pi <- function(a, b, par) {
+    #     gamma0 <- par[["gamma0"]]
+    #     gamma1 <- par[["gamma1"]]
+    #     m <- gamma0
+    #     c <- gamma0*gamma1
+    #
+    #     # real erf via pnorm (no extra packages)
+    #     erf <- function(x) {
+    #       2 * pnorm(x * sqrt(2)) - 1
+    #     }
+    #
+    #     # real erfi via Dawson's integral: erfi(x) = 2/sqrt(pi) * exp(x^2) * dawson(x)
+    #     # requires pracma for dawson(); avoids complex usage entirely
+    #     erfi <- function(x) {
+    #       pracma::erfi(x)
+    #     }
+    #
+    #     # --- main integral ---
+    #     # Integrates 1 - exp(-m/2 * t^2 - c * t) from a to b
+    #     integral_val <- function(a, b, c, m) {
+    #       if (m > 0) {
+    #         # m > 0: erf version
+    #         s <- sqrt(m / 2)
+    #         shift_b <- b + c / m
+    #         shift_a <- a + c / m
+    #         (b - a) -
+    #           exp(c^2 / (2 * m)) * sqrt(pi / (2 * m)) *
+    #           ( erf(s * shift_b) - erf(s * shift_a) )
+    #
+    #       } else if (m < 0) {
+    #         # m < 0: erfi version (all arguments real)
+    #         s <- sqrt(-m / 2)
+    #         shift_b <- b + c / m
+    #         shift_a <- a + c / m
+    #         (b - a) -
+    #           exp(c^2 / (2 * m)) * sqrt(pi / (-2 * m)) *
+    #           ( erfi(s * shift_b) - erfi(s * shift_a) )
+    #
+    #       } else {
+    #         # m == 0: integrand is 1 - exp(-c t)
+    #         if (c != 0) {
+    #           (b - a) + (exp(-c * b) - exp(-c * a)) / c
+    #         } else {
+    #           # m = 0, c = 0: integrand is 1 - exp(0) = 0
+    #           0
+    #         }
+    #       }
+    #     }
+    #
+    #     if (m == 0) {
+    #       if (c > 0) {
+    #         return( integral_val(a, b, c, m) / (b-a) )
+    #       } else {
+    #         return(0)
+    #       }
+    #     }
+    #     root <- -c/m
+    #     if (a < root && b > root) { # then root is between a and b
+    #       if (m > 0) { # positive slope therefore positive foi to the right of the root
+    #         return( integral_val(root,b,c,m)/(b-a) )
+    #       }
+    #       else { # negative slope therefore positive foi to the left of the root
+    #         return( integral_val(a,root,c,m)/(b-a) )
+    #       }
+    #     } else {
+    #       if ((m*((a+b)/2) + c)>0) { # foi is positive in interval a,b
+    #         return( integral_val(a,b,c,m)/(b-a) )
+    #       }
+    #       else (return(0)) # foi is negative in interval a,b
+    #     }
+    #   }
+    # }
 
-        if (b <= tau) return(0)
-
-        # Adjust bounds if partially below tau
-        a_adj <- max(a, tau)
-        b_adj <- b
-
-        sqrt_pi <- sqrt(pi)
-        sqrt2 <- sqrt(2)
-        sqrt_gamma0 <- sqrt(gamma0)
-
-        erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
-
-        exp_term <- exp((gamma0 * a_adj^2) / 2 + gamma0 * gamma1 * a_adj + (gamma0 * gamma1^2) / 2)
-
-        erf1 <- erf(sqrt_gamma0 * (sqrt2 * a_adj + sqrt2 * gamma1) / 2)
-        erf2 <- erf(sqrt_gamma0 * (sqrt2 * b_adj + sqrt2 * gamma1) / 2)
-
-        A_term <- sqrt_pi * sqrt_gamma0 * sqrt2 * exp_term * (erf1 - erf2)
-        B_term <- 2 * gamma0 * (b_adj - a_adj)
-
-        integral <- (A_term + B_term) / (2 * gamma0)
-
-        avg_pi <- integral / (b - a)
-
-        return(avg_pi)
-      }
-    }
-
-    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") {
+    else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons" && tau == 0) {
       group_pi <- function(a, b, par) {
         gamma0 <- par[["gamma0"]]
         gamma1 <- par[["gamma1"]]
         gamma2 <- par[["gamma2"]]
         if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
         pi_func <- function(t) {
-          return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
+          if (tau>0) {
+            if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
+            integral <- (((gamma1 - t * gamma0) * gamma2 - gamma0) * exp(-t * gamma2) + exp(-tau * gamma2) * ((t - tau) * gamma1 * gamma2^2 * exp(tau * gamma2) + (tau * gamma0 - gamma1) * gamma2 + gamma0)) / gamma2^2
+            return(ifelse(t<tau, 1, 1-exp(-integral)))
+          } else {
+            if (abs(gamma2) < 1e-6) gamma2 <- 1e-6
+            return(1-exp(-1*(exp(-gamma2*t)*((gamma1*gamma2^2*t-gamma1*gamma2+gamma0)*exp(gamma2*t)-gamma0*gamma2*t+gamma1*gamma2-gamma0))/(gamma2^2)))
+          }
         }
         tryCatch(
           integrate(pi_func, a, b)$value / (b - a),
@@ -220,25 +282,39 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
         integrand <- function(t, par) {
           foi_pieces <- unname(par[names(par) != "rho"])
           sapply(t, function(tt) {
-            interval_lengths <- pmax(pmin(tt, upper_cutoffs) - lower_cutoffs, 0)
+            interval_lengths <- pmax(pmin(tt, upper_cutoffs) - pmax(lower_cutoffs, tau), 0)
             cum_foi <- sum(foi_pieces * interval_lengths)
             1 - exp(-cum_foi)
           })
         }
 
-        auc <- integrate(function(t) integrand(t, par), lower = a, upper = b)$value
+        if (b <= tau) {
+          return(1)
+        } else if (a <= tau) {
+          auc <- 1*(tau-a) + integrate(function(t) integrand(t, par), lower = tau, upper = b)$value
 
+        } else {
+          auc <- integrate(function(t) integrand(t, par), lower = a, upper = b)$value
+
+        }
         return(auc/(b-a))
       }
     }
 
-  # else if (catalytic_model_type == "SimpleCatalytic" || catalytic_model_type == "OriginalCatalytic"|| catalytic_model_type == "RestrictedCatalytic"|| catalytic_model_type == "WaningImmunity" || catalytic_model_type == "Vaccine") {
-  #   group_pi <- function(a, b, par) {
-  #     1/(b-a) * integrate(function(x) {pi_t(x, par)}, a, b)$value
-  #   }
-  # }
+  else if (tau > 0) {
+    group_pi <- function(a, b, par) {
+      if (b <= tau) {
+        return(1)
+      } else if (a < tau) {
+        1/(b-a) * (1*(tau-a) + integrate(function(x) {pi_t(x, par)}, tau, b)$value)
+      } else {
+        1/(b-a) * integrate(function(x) {pi_t(x, par)}, a, b)$value
+      }
+    }
+  }
 
-  else { # this okay? Any situation where it is not? :))))
+
+  else {
     group_pi <- function(a, b, par) {
       1/(b-a) * integrate(function(x) {pi_t(x, par)}, a, b)$value
     }

@@ -35,12 +35,12 @@
 #' Base R functions like \code{ifelse}, \code{findInterval}, and \code{pmin} are used, so no special imports are required.
 #'
 #' @export
-set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA) { # foi_functional_form is a string, model_fixed_params is a list
+set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, tau = 0) { # foi_functional_form is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (foi_functional_form == "Constant") {
     foi_t <- function(t, par) {
       foi <- par[["foi"]]
-      return(foi) # constant foi.
+      return(ifelse(t<tau, 0, foi)) # constant foi
     }
   }
 
@@ -48,8 +48,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
     foi_t <- function(t, par) {
       m <- par[["m"]]
       c <- par[["c"]]
-
-      return(m*t+c)
+      return(ifelse(t<tau, 0, m*t+c))
     }
   }
 
@@ -68,7 +67,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
       gamma0 <- par[["gamma0"]]
       gamma1 <- par[["gamma1"]]
       gamma2 <- par[["gamma2"]]
-      return((gamma0*t - gamma1)*exp(-gamma2*t)+gamma1)
+      return(ifelse(t<tau, 0, (gamma0*t - gamma1)*exp(-gamma2*t)+gamma1))
     }
   }
 
@@ -78,7 +77,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
     foi_t <- function(t, par) {
       # Each interval is [lower_cutoffs[i], upper_cutoffs[i])
       interval_index <- findInterval(t, lower_cutoffs, rightmost.closed = FALSE)
-      return(par[interval_index])
+      return(ifelse(t<tau, 0, par[interval_index]))
     }
   }
 

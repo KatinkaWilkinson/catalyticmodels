@@ -1,0 +1,133 @@
+---
+title: "Examples"
+format: html
+editor: visual
+---
+
+## Files
+```{r}
+source(here::here('R/FoiFromCatalyticModel.R'))
+source(here::here('R/FoiFromCatalyticModel_unparallelised.R'))
+source(here::here('R/Plot.R'))
+source(here::here('R/set_foi_t.R'))
+source(here::here('R/set_group_foi.R'))
+source(here::here('R/set_pi_t.R'))
+source(here::here('R/set_group_pi.R'))
+source(here::here('R/set_par_init.R'))
+source(here::here('R/Utils.R'))
+source(here::here('R/Checks.R'))
+```
+
+## Data
+```{r}
+library(future.apply)
+
+waning.sample.2yrs <- readRDS("SimulatedData/waning.sample.2yrs.rds")
+waning.sample.10yrs <- readRDS("SimulatedData/waning.sample.10yrs.rds")
+waning.sample.15yrs <- readRDS("SimulatedData/waning.sample.15yrs.rds")
+sensitivity.sample <- readRDS("SimulatedData/sensitivity.sample.rds")
+no.waning.sample <- readRDS("SimulatedData/no.waning.sample.rds")
+
+t <- no.waning.sample$t.sim
+y <- no.waning.sample$y.sims
+n <- no.waning.sample$n.sim
+true_foi <- no.waning.sample$dCFOI
+
+t_wan <- waning.sample.15yrs$t.sim
+y_wan <- waning.sample.15yrs$y.sims
+n_wan <- waning.sample.15yrs$n.sim
+true_foi_wan <- waning.sample.15yrs$dCFOI
+```
+
+## Non-parametric examples
+```{r}
+Splines_LifelongImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=1)
+
+Splines_WaningImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", boot_num=1, model_fixed_params = list(w=1/15))
+
+plotFOI(list(lifelong=Splines_LifelongImmunity, waning=Splines_WaningImmunity), from=0, to=60, true_foi = list(foi=true_foi, t=t))
+```
+
+## Parametric Examples
+```{r}
+# -------------------- Constants --------------------------
+Constant1 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "OriginalCatalytic", foi_functional_form = "Constant")
+
+Constant2 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "RestrictedCatalytic", foi_functional_form = "Constant", model_fixed_params = list(k=0.9, l=0.9), lower=0, upper=1)
+
+Constant3 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower = 0, upper = 1)
+
+plotFOI(list(OriginalCat = Constant1, RestrictedCat = Constant2, SimpleCat = Constant3), from=0, to=60, confint = TRUE, true_foi = list(foi=true_foi, t=t))
+
+# -------------------- Linear, Griffiths, Piecewise Constant, Farrington  --------------------------
+Linear <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "SimpleCatalytic_NegativeCorrected", foi_functional_form = "Linear", boot_num=2, lower=c(-0.1, 0), upper=c(0.1,0.2)) # linear is sensitive to bounds!
+
+Griffiths <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Griffiths", lower=c(-1, -400), upper=c(0,0), model_fixed_params = list(tau=1), boot_num=2) # sensitive to bounds
+
+PiecewiseConstant <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(5,10,60)), boot_num=2)
+
+Farrington <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", boot_num=2, lower=c(0, 0, 0)) # put in lower bounds
+
+plotFOI(list(Linear=Linear, Griffiths=Griffiths, PiecewiseConstant=PiecewiseConstant, Farrington=Farrington), from=0, to=60, true_foi = list(foi=true_foi, t=t))
+```
+
+## Maternal Antibodies
+```{r}
+ConstantMA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower = 0, upper = 1, tau=1, boot_num=2)
+
+LinearMA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic_NegativeCorrected", foi_functional_form = "Linear", tau=1, lower=c(-0.006, 0), upper=c(0.001,0.2), boot_num=2)
+
+FarringtonMA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower = c(0,0,0), upper=c(1,1,1), tau=1, boot_num=2) # sensitive to bounds
+
+PiecewiseMA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "PiecewiseConstant", tau=1, model_fixed_params = list(upper_cutoffs = c(5,10,60)), boot_num=2)
+
+plotFOI(list(ConstantMA=ConstantMA, LinearMA=LinearMA, FarringtonMA=FarringtonMA, PiecewiseMA=PiecewiseMA), from=0, to=60, true_foi = list(foi=true_foi, t=t))
+```
+## Waning antibodies
+```{r}
+Constant_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type = "WaningImmunity", foi_functional_form = "Constant", model_fixed_params = list(w=1/15), lower=0, upper = 1, boot_num=2)
+
+Linear_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type = "WaningImmunity", foi_functional_form = "Linear", model_fixed_params = list(w=1/15), lower=c(-0.1, 0), upper = c(0, 0.3), boot_num=2)
+
+# PiecewiseConstant_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type="WaningImmunity", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(5,10,60), w=1/15), boot_num=2)
+
+Farrington_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type="WaningImmunity", foi_functional_form = "Farringtons",model_fixed_params = list(w=1/15), boot_num=2, lower=c(0, 0, 0)) # put in lower bounds
+
+plotFOI(list(Constant_wan=Constant_wan, Linear_wan=Linear_wan, Farrington_wan=Farrington_wan), from=0, to=60, true_foi = list(foi=true_foi_wan, t=t_wan))
+```
+
+## Assay sensitivity
+```{r}
+PiecewiseConstant_rho0.9 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(5,10,60)), rho=0.9, boot_num=2)
+
+Farrington_rho0.9 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower=c(0, 0, 0), rho=0.9, boot_num=2) # put in lower bounds
+
+plotFOI(list(PiecewiseConstant_rho0.9=PiecewiseConstant_rho0.9, Farrington_rho0.9=Farrington_rho0.9), from=0, to=60, true_foi = list(foi=true_foi, t=t))
+```
+## Exact ages (instead of age groups)
+```{r}
+t_mid <- (t[,1] + t[,2])/2
+
+Splines_LifelongImmunity_exactt <- FoiFromCatalyticModel_unparallelised(t_mid, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines")
+
+Constant_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower = 0, upper = 1)
+
+Linear_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic_NegativeCorrected", foi_functional_form = "Linear", boot_num=2, lower=c(-0.1, 0), upper=c(0.1,0.2)) # linear is sensitive to bounds!
+
+PiecewiseConstant_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(5,10,60)))
+
+Farrington_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower=c(0, 0, 0)) # put in lower bounds
+
+plotFOI(list(Splines_LifelongImmunity_exactt = Splines_LifelongImmunity_exactt, Constant_exactt = Constant_exactt, Linear_exactt = Linear_exactt, PiecewiseConstant_exact=PiecewiseConstant_exactt, Farrington_exactt=Farrington_exactt), from=0, to=60, confint = TRUE, true_foi = list(foi=true_foi, t=t))
+
+```
+## R0
+```{r}
+
+```
+
+## Unparallelised
+
+```{r}
+
+```

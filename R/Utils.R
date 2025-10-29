@@ -63,7 +63,7 @@ create_boot_samps <- function(t, y, n, num_boot) {
   return(boot_list)
 }
 
-neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho, param_names) {
+neg_total_binom_loglik <- function(par, pi_t, group_pi, group_foi, t, y, n, rho, param_names) {
   if (is.null(names(par))) {names(par) <- param_names} # putting this in because optim drops the names!
 
   # Compute pi depending on whether t is intervals or points
@@ -111,28 +111,4 @@ neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho, param_name
   # return(loglik_deviance)
 }
 
-## NEW VERSION BELOW!!! Maybe uncomment!!!
 
-# neg_total_binom_loglik <- function(par, pi_t, group_pi, t, y, n, rho) {
-#   # Evaluate pi
-#   pi <- tryCatch({
-#     if (is.null(dim(t)) || ncol(t) == 1) {
-#       sapply(t, function(x) pi_t(x, par))
-#     } else {
-#       mapply(function(a, b) group_pi(a, b, par), t[,1], t[,2])
-#     }
-#   }, error = function(e) rep(NA, length(y)))
-#
-#   # If pi is bad, return penalty
-#   if (any(!is.finite(pi)) || any(pi < 0) || any(pi > 1)) return(1e6)
-#
-#   p_seropos_result <- pmin(pmax(rho * pi, 1e-8), 1 - 1e-8)
-#
-#   ll <- dbinom(y, size = n, prob = p_seropos_result, log = TRUE)
-#
-#   total_ll <- sum(ll)
-#
-#   if (!is.finite(total_ll)) return(1e6)
-#
-#   return(-total_ll)
-# }

@@ -1,4 +1,4 @@
-set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, foi_t = NULL) { # type is a string, model_fixed_params is a list
+set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed_params = NA, foi_t = NULL, tau = 0) { # type is a string, model_fixed_params is a list
   # Handles MuenchGeneral, MuenchRestricted, Griffiths, Farringtons, PiecewiseConstant, Splines, Keidings
   if (!is.na(foi_functional_form)) {
     if (foi_functional_form == "Constant") {
@@ -91,6 +91,19 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
       }
     }
 
+  }
+
+  else if (tau > 0) {
+    group_foi <- function(a, b, par) {
+      if (b < tau) {
+        return(0)
+      }
+      else if (a < tau) {
+        1/(b-a) * integrate(function(x) {foi_t(x, par)}, tau, b)$value
+      } else {
+        1/(b-a) * integrate(function(x) {foi_t(x, par)}, a, b)$value
+      }
+    }
   }
 
   else {

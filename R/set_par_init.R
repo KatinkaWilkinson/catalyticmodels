@@ -31,8 +31,12 @@ set_par_init <- function(catalytic_model_type, foi_functional_form, model_fixed_
       pars <- c(foi=0.1)
     }
 
+    if (foi_functional_form == "Linear") {
+      pars <- c(m=-0.002, c=0.12)
+    }
+
     else if (foi_functional_form == "Griffiths") {
-      pars <- c(gamma0=1, gamma1=-1)
+      pars <- c(gamma0=-0.1, gamma1=-1)
     }
 
     else if (foi_functional_form == "Farringtons") {

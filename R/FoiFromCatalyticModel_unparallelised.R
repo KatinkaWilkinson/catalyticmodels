@@ -70,7 +70,7 @@
 #' #   boot_num = 100
 #' # )
 #' # str(my_model)
-FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init=NA, rho=1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, boot_num = 1000, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, trace = 0, convergence_attempts=20) {
+FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL, group_foi = NULL, par_init=NA, rho=1, catalytic_model_type = NA, foi_functional_form = NA, model_fixed_params = NA, boot_num = 1000, lower = -Inf, upper = Inf, maxit = 100, factr = 1e7, reltol = 1e-8, trace = 0, convergence_attempts=20, tau=0) {
   # check that inputs have been entered correctly!
   check_inputs(t, y, n, pi_t, foi_t, group_pi, group_foi,
                par_init, rho, catalytic_model_type,
@@ -78,15 +78,15 @@ FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, g
                lower, upper)
 
   # Preset: Set pi_t, group_pi, foi_t, group_foi to the correct values, if type != NA
+  if (!is.na(foi_functional_form)) {
+    foi_t <- set_foi_t(catalytic_model_type, foi_functional_form, model_fixed_params, tau)
+    group_foi <- set_group_foi(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t, tau)
+  }
   if (!is.na(catalytic_model_type)) {
     if (is.na(foi_functional_form) || !is.na(foi_functional_form) && foi_functional_form != "Splines") {
-      pi_t <- set_pi_t(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t=foi_t)
-      group_pi <- set_group_pi(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t)
+      pi_t <- set_pi_t(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t=foi_t, tau)
+      group_pi <- set_group_pi(catalytic_model_type, foi_functional_form, model_fixed_params, pi_t, tau)
     }
-  }
-  if (!is.na(foi_functional_form)) {
-    foi_t <- set_foi_t(catalytic_model_type, foi_functional_form, model_fixed_params)
-    group_foi <- set_group_foi(catalytic_model_type, foi_functional_form, model_fixed_params, foi_t)
   }
 
   if (any(is.na(par_init)) || is.na(rho)) { # come back to this...... might be sketchy
@@ -131,6 +131,7 @@ FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, g
                         upper = upper,
                         pi_t=pi_t,
                         group_pi=group_pi,
+                        group_foi=group_foi,
                         t=t, y=y, n=n,
                         rho=rho, param_names=param_names)
       } else {
@@ -142,6 +143,7 @@ FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, g
                         upper = upper,
                         pi_t = pi_t,
                         group_pi = group_pi,
+                        group_foi=group_foi,
                         t = t, y = y, n = n,
                         rho = rho, param_names=param_names)
       }
@@ -349,12 +351,12 @@ FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, g
   # calculate AIC and AICc
   n_total <- sum(n)
   k <- length(par_init)
-  neg_binom_ll <- neg_total_binom_loglik(params_MLE, pi_t, group_pi, t, y, n, rho, param_names)
+  neg_binom_ll <- neg_total_binom_loglik(params_MLE, pi_t, group_pi, group_foi, t, y, n, rho, param_names)
   # AIC <- -2*logLik + 2*k
   AIC <- 2*neg_binom_ll + 2*k
   # AICc <- AIC + (2*k*(k+1)) / (n - k - 1)
   AICc <- AIC + (2*k*(k+1)) / (n_total - k - 1)
 
 
-  return(list(params_MLE = params_MLE_list, params_CI=params_CI, AIC=AIC, AICc = AICc, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, pi_t=pi_t, group_pi=group_pi)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
+  return(list(params_MLE = params_MLE_list, params_CI=params_CI, AIC=AIC, AICc = AICc, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, pi_t=pi_t, group_pi=group_pi, tau=tau)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
 }
