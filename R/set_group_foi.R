@@ -93,6 +93,7 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
 
     else if (foi_functional_form == "Griffiths") {
       tau <- model_fixed_params$tau
+      force(tau)
       group_foi <- function(a, b, par) {
         gamma0 <- par[["gamma0"]]
         gamma1 <- par[["gamma1"]]
@@ -122,6 +123,8 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
     else if (foi_functional_form == "PiecewiseConstant") {
       upper_cutoffs <- model_fixed_params$upper_cutoffs
       lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+      force(upper_cutoffs)
+      force(lower_cutoffs)
       group_foi <- function(a, b, par) {
         par <- par[ !(names(par) %in% c("rho", "k", "l", "w")) ]
         # Determine overlap between each piecewise interval and [a, b)
@@ -150,6 +153,7 @@ set_group_foi <- function(catalytic_model_type, foi_functional_form, model_fixed
 
     else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
       w <- model_fixed_params$w
+      force(w)
       group_foi <- function(a, b, spline_pi_t) {
         integrand <- function(x) {
           pi_x <- predict(spline_pi_t, x)$y

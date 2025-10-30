@@ -125,17 +125,29 @@ plotFOI <- function(
     is_spline <- !is.null(model[["spline_pi_t"]])
 
     foi_grid <- if (is_spline) model$foi_t(t_grid, model$spline_pi_t)
-    else            model$foi_t(t_grid, unlist(model$params_MLE))
+    else  model$foi_t(t_grid, unlist(model$params_MLE))
 
     if (isTRUE(confint)) {
       if (is_spline) {
-        if (!is.null(model$boot_spline_pi_t) && is.list(model$boot_spline_pi_t)) {
-          foi_CI <- matrix(NA_real_, nrow = length(t_grid), ncol = 2)
-          for (k in seq_along(t_grid)) {
-            boot_fois <- vapply(model$boot_spline_pi_t, function(f) model$foi_t(t_grid[k], f), numeric(1))
-            foi_CI[k, ] <- as.numeric(quantile(boot_fois, probs = c(0.025, 0.975), na.rm = TRUE))
-          }
+        if (!is.null(model$boot_y)) {
+          # Build a new spline for each bootstrap y, then evaluate FOI on t_grid
+          t_fit <- if (is.matrix(model$t) && ncol(model$t) == 2) rowMeans(model$t) else model$t
+          g <- length(t_fit)
+          boot_mat <- matrix(model$boot_y, ncol = g, byrow = TRUE)
+
+          boot_foi_mat <- apply(boot_mat, 1, function(yb) {
+            bspline <- smooth.spline(t_fit, yb / model$n)
+            model$foi_t(t_grid, bspline)
+          })
+
+          if (is.vector(boot_foi_mat)) boot_foi_mat <- matrix(boot_foi_mat, nrow = length(t_grid))
+          if (nrow(boot_foi_mat) != length(t_grid)) boot_foi_mat <- t(boot_foi_mat)
+
+          foi_CI <- t(apply(boot_foi_mat, 1, function(v)
+            quantile(v, probs = c(0.025, 0.975), na.rm = TRUE)
+          ))
           colnames(foi_CI) <- c("foi_lower","foi_upper")
+
           data.frame(age = t_grid, foi = foi_grid, foi_lower = foi_CI[,1], foi_upper = foi_CI[,2],
                      model = name, row.names = NULL)
         } else {

@@ -85,6 +85,8 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
     else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant" && tau == 0) {
       k <- model_fixed_params$k
       l <- model_fixed_params$l
+      force(k)
+      force(l)
       if (tau > 0) {
         group_pi <- function(a, b, par) {
           foi <- par[["foi"]]
@@ -186,81 +188,6 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
     }
   }
 
-    # else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") {
-    #   tau <- model_fixed_params$tau
-    #   group_pi <- function(a, b, par) {
-    #     gamma0 <- par[["gamma0"]]
-    #     gamma1 <- par[["gamma1"]]
-    #     m <- gamma0
-    #     c <- gamma0*gamma1
-    #
-    #     # real erf via pnorm (no extra packages)
-    #     erf <- function(x) {
-    #       2 * pnorm(x * sqrt(2)) - 1
-    #     }
-    #
-    #     # real erfi via Dawson's integral: erfi(x) = 2/sqrt(pi) * exp(x^2) * dawson(x)
-    #     # requires pracma for dawson(); avoids complex usage entirely
-    #     erfi <- function(x) {
-    #       pracma::erfi(x)
-    #     }
-    #
-    #     # --- main integral ---
-    #     # Integrates 1 - exp(-m/2 * t^2 - c * t) from a to b
-    #     integral_val <- function(a, b, c, m) {
-    #       if (m > 0) {
-    #         # m > 0: erf version
-    #         s <- sqrt(m / 2)
-    #         shift_b <- b + c / m
-    #         shift_a <- a + c / m
-    #         (b - a) -
-    #           exp(c^2 / (2 * m)) * sqrt(pi / (2 * m)) *
-    #           ( erf(s * shift_b) - erf(s * shift_a) )
-    #
-    #       } else if (m < 0) {
-    #         # m < 0: erfi version (all arguments real)
-    #         s <- sqrt(-m / 2)
-    #         shift_b <- b + c / m
-    #         shift_a <- a + c / m
-    #         (b - a) -
-    #           exp(c^2 / (2 * m)) * sqrt(pi / (-2 * m)) *
-    #           ( erfi(s * shift_b) - erfi(s * shift_a) )
-    #
-    #       } else {
-    #         # m == 0: integrand is 1 - exp(-c t)
-    #         if (c != 0) {
-    #           (b - a) + (exp(-c * b) - exp(-c * a)) / c
-    #         } else {
-    #           # m = 0, c = 0: integrand is 1 - exp(0) = 0
-    #           0
-    #         }
-    #       }
-    #     }
-    #
-    #     if (m == 0) {
-    #       if (c > 0) {
-    #         return( integral_val(a, b, c, m) / (b-a) )
-    #       } else {
-    #         return(0)
-    #       }
-    #     }
-    #     root <- -c/m
-    #     if (a < root && b > root) { # then root is between a and b
-    #       if (m > 0) { # positive slope therefore positive foi to the right of the root
-    #         return( integral_val(root,b,c,m)/(b-a) )
-    #       }
-    #       else { # negative slope therefore positive foi to the left of the root
-    #         return( integral_val(a,root,c,m)/(b-a) )
-    #       }
-    #     } else {
-    #       if ((m*((a+b)/2) + c)>0) { # foi is positive in interval a,b
-    #         return( integral_val(a,b,c,m)/(b-a) )
-    #       }
-    #       else (return(0)) # foi is negative in interval a,b
-    #     }
-    #   }
-    # }
-
     else if (!is.na(foi_functional_form) && !is.na(catalytic_model_type) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons" && tau == 0) {
       group_pi <- function(a, b, par) {
         gamma0 <- par[["gamma0"]]
@@ -293,6 +220,8 @@ set_group_pi <- function(catalytic_model_type, foi_functional_form, model_fixed_
       # lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
       upper_cutoffs <- model_fixed_params$upper_cutoffs
       lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+      force(upper_cutoffs)
+      force(lower_cutoffs)
       group_pi <- function(a, b, par) {
         # foi_pieces <- par[ names(par) != "rho" ]
         # # warning("Current foi_pieces: ", paste(round(foi_pieces, 4), collapse = ", "))

@@ -87,6 +87,8 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   else if (!is.na(foi_functional_form) && catalytic_model_type == "RestrictedCatalytic" && foi_functional_form == "Constant") {
     k <- model_fixed_params$k
     l <- model_fixed_params$l
+    force(k)
+    force(l)
     pi_t <- function(t, par) {
       foi <- par[["foi"]]
       return(ifelse(t<tau,1,k * (l - exp(-foi * t))))
@@ -143,6 +145,7 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
 
   else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Griffiths") { # linear with maternal antibodies is the actual form...
     tau <- model_fixed_params$tau
+    force(tau)
     pi_t <- function(t, par) {
       pi_t_one <- function(tt) {
         if (tt < tau) { return(1) }
@@ -195,6 +198,7 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   }
 
   else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "Farringtons") { # linear dampered is the actual functional form
+    force(tau)
     pi_t <- function(t, par) {
       gamma0 <- par[["gamma0"]]
       gamma1 <- par[["gamma1"]]
@@ -212,17 +216,24 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   else if (!is.na(foi_functional_form) && catalytic_model_type == "SimpleCatalytic" && foi_functional_form == "PiecewiseConstant") {
     upper_cutoffs <- model_fixed_params$upper_cutoffs
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
-
+    force(upper_cutoffs)
+    force(lower_cutoffs)
+    force(tau)
     pi_t <- function(t, par) {
-      foi_pieces <- par[ names(par) != "rho" ]
-      interval_lengths <- pmax(pmin(t, upper_cutoffs) - max(tau, lower_cutoffs), 0)
-      cum_foi <- sum(foi_pieces * interval_lengths)
-      return(ifelse(t<tau, 1, 1 - exp(-cum_foi)))
+      foi_pieces <- unname(par[ !(names(par) %in% c("rho","k","l","w")) ])
+      pi_one <- function(tt) {
+        if (tt < tau) return(1)
+        interval_lengths <- pmax(pmin(tt, upper_cutoffs) - pmax(tau, lower_cutoffs), 0) # overlap of [tau, tt] with each interval [lower_cutoffs[i], upper_cutoffs[i])
+        cum_foi <- sum(foi_pieces * interval_lengths)
+        1 - exp(-cum_foi)
+      }
+      vapply(t, pi_one, numeric(1))  # vectorised over t
     }
   }
 
   else if (catalytic_model_type == "OriginalCatalytic") { # potentiallyyyy incorporate k and l... do they also apply to the other models, though?
     # pi_t: compute π(t) = 1 - exp( -∫_0^t λ(x) dx )
+    force(tau)
     pi_t <- function(t, par) {
       k <- par[["k"]]
       l <- par[["l"]]
@@ -238,6 +249,7 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
 
   else if (catalytic_model_type == "SimpleCatalytic") {
     # pi_t: compute π(t) = 1 - exp( -∫_0^t λ(x) dx )
+    force(tau)
     pi_t <- function(t, par) {
       pi_one <- function(tt) {
         if (tt < tau) { return(1) }
@@ -253,6 +265,9 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   else if (catalytic_model_type == "RestrictedCatalytic") {
     k <- model_fixed_params$k
     l <- model_fixed_params$l
+    force(k)
+    force(l)
+    force(tau)
     # pi_t: compute π(t) = 1 - exp( -∫_0^t λ(x) dx )
     pi_t <- function(t, par) {
       pi_one <- function(tt) {
@@ -266,6 +281,7 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
   }
 
   else if (catalytic_model_type == "SimpleCatalytic_NegativeCorrected") {
+    force(tau)
     pi_t <- function(t, par) {
       pi_one <- function(tt, par) {
         if (tt < tau) { return(1) }
@@ -309,208 +325,119 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
 
 
   else if (catalytic_model_type == "WaningImmunity" && foi_functional_form == "PiecewiseConstant") {
-    vec1 <- function(f) {
-      function(x, ...) {
-        y <- f(x, ...)
-        if (length(y) == length(x)) return(y)
-        if (length(y) == 1L)       return(rep_len(y, length(x)))
-        vapply(x, function(xi) f(xi, ...), numeric(1))
-      }
-    }
-    par <- par[ !(names(par) %in% c("rho", "k", "l", "w")) ]
+
     upper_cutoffs <- model_fixed_params$upper_cutoffs
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
-    w <- model_fixed_params$w  # seroreversion rate
-    if (!is.na(w)) { # w is known!
-      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
-        # λ(x)+w
-        integrand <- vec1(function(x) foi_t(x, par) + w)
+    w_fixed <- model_fixed_params$w  # may be NA (estimate) or numeric (fixed)
+    force(upper_cutoffs)
+    force(lower_cutoffs)
+    force(w_fixed)
+    force(tau)
 
-        integrand <- function(x) {
-          # Determine overlap between each piecewise interval and [a, b)
-          overlaps <- pmin(b, upper_cutoffs) - pmax(a, lower_cutoffs)
-          overlaps[overlaps < 0] <- 0  # No overlap = set to zero
-          total_length <- b - a
-          cumulative <- sum(par * overlaps) + total_length*w
-        }
-
-        pi_one <- function(tt) {
-          if (tt < tau) { return(1) }
-
-          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
-
-          # I0 = ∫_0^t (λ+w) dx
-          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          # inner_exp(u)
-          inner_exp <- function(u) {
-            vapply(u, function(ui) {
-              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
-              exp(-Iu)
-            }, numeric(1))
-          }
-
-          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
-          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          val <- 1 - (exp(-I0) + term2)
-          # optional clamp to [0,1]:
-          # val <- max(0, min(1, val))
-          return(val)
-        }
-
-        vapply(t, pi_one, numeric(1))
+    # π(t) = 1 - ( exp(-∫(λ+w)) + w ∫ exp(-∫(λ+w)) )
+    pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+      # λ(x) for piecewise-constant FOI with maternal cutoff τ.
+      # Outside the defined intervals or x < τ, λ(x) = 0.
+      lambda_at <- function(x, par) {
+        foi_pieces <- unname(par[ !(names(par) %in% c("rho","k","l","w")) ])
+        sapply(x, function(xx) {
+          if (xx < tau || xx >= upper_cutoffs[length(upper_cutoffs)]) return(0)
+          idx <- findInterval(xx, lower_cutoffs, rightmost.closed = FALSE)
+          if (idx <= 0) return(0)
+          foi_pieces[idx]
+        })
       }
-    } else { # w = is unknown
-      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
-        w <- par[["w"]]
-        # λ(x)+w
-        integrand <- vec1(function(x) foi_t(x, par) + w)
 
-        pi_one <- function(tt) {
-          if (tt < tau) { return(1) }
+      # use fixed w if provided, otherwise pull w from par
+      w_val <- if (is.null(w_fixed) || is.na(w_fixed)) par[["w"]] else w_fixed
 
-          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
-
-          # I0 = ∫_0^t (λ+w) dx
-          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          # inner_exp(u):
-          inner_exp <- function(u) {
-            vapply(u, function(ui) {
-              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
-              exp(-Iu)
-            }, numeric(1))
-          }
-
-          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
-          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          val <- 1 - (exp(-I0) + term2)
-          # optional clamp to [0,1]:
-          # val <- max(0, min(1, val))
-          return(val)
-        }
-
-        vapply(t, pi_one, numeric(1))
-      }
-    }
-
-
-
-  }
-
-  else if (catalytic_model_type == "WaningImmunity") {
-    vec1 <- function(f) {
-      function(x, ...) {
-        y <- f(x, ...)
-        if (length(y) == length(x)) return(y)
-        if (length(y) == 1L)       return(rep_len(y, length(x)))
-        vapply(x, function(xi) f(xi, ...), numeric(1))
-      }
-    }
-
-    w <- model_fixed_params$w  # seroreversion rate
-    if (!is.na(w)) { # w is known!
-      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
-        # λ(x)+w
-        integrand <- vec1(function(x) foi_t(x, par) + w)
-
-        pi_one <- function(tt) {
-          if (tt < tau) { return(1) }
-
-          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
-
-          # I0 = ∫_0^t (λ+w) dx
-          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          # inner_exp(u)
-          inner_exp <- function(u) {
-            vapply(u, function(ui) {
-              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
-              exp(-Iu)
-            }, numeric(1))
-          }
-
-          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
-          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          val <- 1 - (exp(-I0) + term2)
-          # optional clamp to [0,1]:
-          # val <- max(0, min(1, val))
-          return(val)
-        }
-
-        vapply(t, pi_one, numeric(1))
-      }
-    } else { # w = is unknown
-      # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-      pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
-        w <- par[["w"]]
-        # λ(x)+w
-        integrand <- vec1(function(x) foi_t(x, par) + w)
-
-        pi_one <- function(tt) {
-          if (tt < tau) { return(1) }
-
-          if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
-
-          # I0 = ∫_0^t (λ+w) dx
-          I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          # inner_exp(u):
-          inner_exp <- function(u) {
-            vapply(u, function(ui) {
-              Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
-              exp(-Iu)
-            }, numeric(1))
-          }
-
-          # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
-          term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-          val <- 1 - (exp(-I0) + term2)
-          # optional clamp to [0,1]:
-          # val <- max(0, min(1, val))
-          return(val)
-        }
-
-        vapply(t, pi_one, numeric(1))
-      }
-    }
-
-
-
-  }
-
-  else if (catalytic_model_type == "WaningImmunity_NegativeCorrected") {
-    w <- model_fixed_params$w  # seroreversion rate
-    vec1 <- function(f) {
-      function(x, ...) {
-        y <- f(x, ...)
-        if (length(y) == length(x)) return(y)
-        if (length(y) == 1L)       return(rep_len(y, length(x)))
-        vapply(x, function(xi) f(xi, ...), numeric(1))
-      }
-    }
-
-    # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
-    pi_t <- function(t, par, rel.tol = 1e-4) {
-      # λ(x)+w
-      integrand <- vec1(function(x) max(0,foi_t(x, par)) + w)
+      # vectorised integrand for outer/inner integrals
+      integrand <- function(x) lambda_at(x, par) + w_val
 
       pi_one <- function(tt) {
-        if (tt < tau) { return(1) }
-
+        if (tt < tau) return(1)
         if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
 
         # I0 = ∫_0^t (λ+w) dx
         I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
 
-        # inner_exp(u)
+        # inner_exp(u) = exp( -∫_u^t (λ+w) dx )
+        inner_exp <- function(u) {
+          sapply(u, function(ui) {
+            Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
+            exp(-Iu)
+          })
+        }
+
+        term2 <- w_val * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+        1 - (exp(-I0) + term2)
+      }
+
+      vapply(t, pi_one, numeric(1))
+    }
+  }
+
+
+  else if (catalytic_model_type == "WaningImmunity") {
+    w_fixed <- model_fixed_params$w
+    force(w_fixed)
+    force(tau)
+
+    # π(t) = 1 - ( exp(-∫0^t (λ+w)) + w ∫0^t exp(-∫u^t (λ+w)) du )
+    pi_t <- function(t, par, rel.tol = .Machine$double.eps^0.5) {
+      # use fixed w if provided, otherwise pull w from par
+      w_val <- if (is.null(w_fixed) || is.na(w_fixed)) par[["w"]] else w_fixed
+
+      # integrand for outer and inner integrals; foi_t is already vectorised
+      integrand <- function(x) foi_t(x, par) + w_val
+
+      pi_one <- function(tt) {
+        if (tt < tau) return(1)
+        if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+
+        # I0 = ∫_0^t (λ+w) dx
+        I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+        # inner_exp(u) = exp( -∫_u^t (λ+w) dx )
+        inner_exp <- function(u) {
+          sapply(u, function(ui) {
+            Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
+            exp(-Iu)
+          })
+        }
+
+        term2 <- w_val * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+        1 - (exp(-I0) + term2)
+      }
+
+      vapply(t, pi_one, numeric(1))
+    }
+  }
+
+
+  else if (catalytic_model_type == "WaningImmunity_NegativeCorrected") {
+    w_fixed <- model_fixed_params$w  # may be numeric or NA
+    force(w_fixed)
+    force(tau)
+
+    # π(t) = 1 - ( exp(-∫0^t (λ⁺+w)) + w ∫0^t exp(-∫_u^t (λ⁺+w)) du )
+    # where λ⁺(x) = max(0, λ(x)) to correct negatives
+    pi_t <- function(t, par, rel.tol = 1e-4) {
+      # use fixed w if provided, otherwise take w from par
+      w_val <- if (is.null(w_fixed) || is.na(w_fixed)) par[["w"]] else w_fixed
+      stopifnot(is.numeric(w_val), length(w_val) == 1, w_val >= 0)
+
+      # vectorised integrand for both outer and inner integrals
+      integrand <- function(x) pmax(0, foi_t(x, par)) + w_val
+
+      pi_one <- function(tt) {
+        if (tt < tau) return(1)
+        if (!is.finite(tt) || tt < 0) stop("t must be nonnegative and finite.")
+
+        # I0 = ∫_0^t (λ⁺+w) dx
+        I0 <- stats::integrate(integrand, lower = 0, upper = tt, rel.tol = rel.tol)$value
+
+        # inner_exp(u) = exp( -∫_u^t (λ⁺+w) dx )
         inner_exp <- function(u) {
           vapply(u, function(ui) {
             Iu <- stats::integrate(integrand, lower = ui, upper = tt, rel.tol = rel.tol)$value
@@ -518,19 +445,13 @@ set_pi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_para
           }, numeric(1))
         }
 
-        # term2 = w * ∫_0^t exp(-∫_u^t (λ+w)) du
-        term2 <- w * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
-
-        val <- 1 - (exp(-I0) + term2)
-        # optional clamp to [0,1]:
-        # val <- max(0, min(1, val))
-        return(val)
+        term2 <- w_val * stats::integrate(inner_exp, lower = 0, upper = tt, rel.tol = rel.tol)$value
+        1 - (exp(-I0) + term2)
       }
 
       vapply(t, pi_one, numeric(1))
     }
   }
-
 
   else {
     return(NA)

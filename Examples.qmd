@@ -4,24 +4,8 @@ format: html
 editor: visual
 ---
 
-## Files
-```{r}
-source(here::here('R/FoiFromCatalyticModel.R'))
-source(here::here('R/FoiFromCatalyticModel_unparallelised.R'))
-source(here::here('R/Plot.R'))
-source(here::here('R/set_foi_t.R'))
-source(here::here('R/set_group_foi.R'))
-source(here::here('R/set_pi_t.R'))
-source(here::here('R/set_group_pi.R'))
-source(here::here('R/set_par_init.R'))
-source(here::here('R/Utils.R'))
-source(here::here('R/Checks.R'))
-```
-
 ## Data
 ```{r}
-library(future.apply)
-
 waning.sample.2yrs <- readRDS("SimulatedData/waning.sample.2yrs.rds")
 waning.sample.10yrs <- readRDS("SimulatedData/waning.sample.10yrs.rds")
 waning.sample.15yrs <- readRDS("SimulatedData/waning.sample.15yrs.rds")
@@ -41,9 +25,9 @@ true_foi_wan <- waning.sample.15yrs$dCFOI
 
 ## Non-parametric examples
 ```{r}
-Splines_LifelongImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=8)
+Splines_LifelongImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Splines", boot_num=100)
 
-Splines_WaningImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", boot_num=8, model_fixed_params = list(w=1/15))
+Splines_WaningImmunity <- FoiFromCatalyticModel_unparallelised(t, y, n, catalytic_model_type = "WaningImmunity", foi_functional_form = "Splines", boot_num=100, model_fixed_params = list(w=1/15))
 
 plotFOI(list(lifelong=Splines_LifelongImmunity, waning=Splines_WaningImmunity), from=0, to=60, true_foi = list(foi=true_foi, t=t))
 ```
@@ -95,6 +79,10 @@ Farrington_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_typ
 
 plotFOI(list(Constant_wan=Constant_wan, Linear_wan=Linear_wan, Farrington_wan=Farrington_wan), from=0, to=60, true_foi = list(foi=true_foi_wan, t=t_wan))
 ```
+# Unknown waning rates (warning: long runtime)
+```{r}
+Constant_unknown_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type = "WaningImmunity", foi_functional_form = "Constant", model_fixed_params = list(w=NA), lower=0, upper = 5, boot_num=2)
+```
 
 ## Assay sensitivity
 ```{r}
@@ -104,6 +92,12 @@ Farrington_rho0.9 <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="Simple
 
 plotFOI(list(PiecewiseConstant_rho0.9=PiecewiseConstant_rho0.9, Farrington_rho0.9=Farrington_rho0.9), from=0, to=60, true_foi = list(foi=true_foi, t=t))
 ```
+
+## unknown Assay sensitivity
+```{r}
+Farrington_rhoNA <- FoiFromCatalyticModel(t, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower=c(0, 0, 0), rho=NA, boot_num=2) # put in lower bounds
+```
+
 ## Exact ages (instead of age groups)
 ```{r}
 t_mid <- (t[,1] + t[,2])/2
@@ -112,22 +106,114 @@ Splines_LifelongImmunity_exactt <- FoiFromCatalyticModel_unparallelised(t_mid, y
 
 Constant_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower = 0, upper = 1)
 
-Linear_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic_NegativeCorrected", foi_functional_form = "Linear", boot_num=2, lower=c(-0.1, 0), upper=c(0.1,0.2)) # linear is sensitive to bounds!
+Linear_NegCorrected_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic_NegativeCorrected", foi_functional_form = "Linear", lower=c(-0.1, 0), upper=c(0.1,0.2), boot_num=100) # linear is sensitive to bounds!Reduced boot_num for shorter runtime
+
+Linear_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Linear", lower=c(-0.1, 0), upper=c(0.1,0.2), boot_num=100) # linear is sensitive to bounds!
 
 PiecewiseConstant_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "PiecewiseConstant", model_fixed_params = list(upper_cutoffs = c(5,10,60)))
 
-Farrington_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower=c(0, 0, 0)) # put in lower bounds
+Farrington_exactt <- FoiFromCatalyticModel(t_mid, y, n, catalytic_model_type="SimpleCatalytic", foi_functional_form = "Farringtons", lower=c(0, 0, 0), upper=c(4,4,4)) # sensitive to bounds
 
-plotFOI(list(Splines_LifelongImmunity_exactt = Splines_LifelongImmunity_exactt, Constant_exactt = Constant_exactt, Linear_exactt = Linear_exactt, PiecewiseConstant_exact=PiecewiseConstant_exactt, Farrington_exactt=Farrington_exactt), from=0, to=60, confint = TRUE, true_foi = list(foi=true_foi, t=t))
 
+# some plots
+
+plotFOI(list(Splines_LifelongImmunity_exactt = Splines_LifelongImmunity_exactt, Constant_exactt = Constant_exactt, Linear_exactt = Linear_exactt ,Linear_NegCorrected_exactt = Linear_NegCorrected_exactt, PiecewiseConstant_exact=PiecewiseConstant_exactt, Farrington_exactt=Farrington_exactt), from=0, to=60, true_foi = list(foi=true_foi, t=t))
+
+plotFOI(list(Constant_exactt = Constant_exactt, Linear_exactt = Linear_exactt,Linear_NegCorrected_exactt = Linear_NegCorrected_exactt, PiecewiseConstant_exact=PiecewiseConstant_exactt, Farrington_exactt=Farrington_exactt), from=0, to=60, confint=TRUE, true_foi = list(foi=true_foi, t=t))
+
+plotFOI(list(Splines_LifelongImmunity_exactt = Splines_LifelongImmunity_exactt), from=0, to=60, confint=TRUE, true_foi = list(foi=true_foi, t=t))
 ```
 ## R0
 ```{r}
+age_bins <- no.waning.sample$t.sim # each row is an age group a, b, -> [a,b)
+pop_per_bin <- c(515.852, 1913.218, 2139.428, 1920.737, 1701.976, 2705.607, 2116.874, 1559.692, 2345.608)
 
+R0(Splines_LifelongImmunity, age_bins, pop_per_bin)
+R0(Constant1, age_bins, pop_per_bin)
+R0(Farrington, age_bins, pop_per_bin)
+R0(PiecewiseConstant_exactt, age_bins, pop_per_bin)
 ```
 
 ## Unparallelised
 
 ```{r}
+# unparallelised can be useful when you want to run multiple models in parallel and rather than parallelising within each model fit. It is also useful for tracking how far you are in the bootstrap fits, as a message is printed each time a model is fit to a bootstrap sample
 
+Constant_exactt <- FoiFromCatalyticModel_unparallelised(t_mid, y, n, catalytic_model_type = "SimpleCatalytic", foi_functional_form = "Constant", lower = 0, upper = 1)
+
+Constant_wan <- FoiFromCatalyticModel(t_wan, y_wan, n_wan, catalytic_model_type = "WaningImmunity", foi_functional_form = "Constant", model_fixed_params = list(w=1/15), lower=0, upper = 1, boot_num=4) # in these situations it can be nice to track how far along the run is, because model fitting takes a long time
+```
+
+## AIC / AICc
+```{r}
+# age groups
+AIC_comp(list(OriginalCat = Constant1, RestrictedCat = Constant2, SimpleCat = Constant3, Linear=Linear, Griffiths=Griffiths, PiecewiseConstant=PiecewiseConstant, Farrington=Farrington))
+
+# note: splines does allow for AIC calculations in this package
+AIC_comp(list(splines=Splines_LifelongImmunity_exactt))
+
+# exact ages
+AIC_comp(list(Constant_exactt = Constant_exactt, Linear_exactt = Linear_exactt,Linear_NegCorrected_exactt = Linear_NegCorrected_exactt, PiecewiseConstant_exact=PiecewiseConstant_exactt, Farrington_exactt=Farrington_exactt))
+
+# exact ages
+AICc_comp(list(OriginalCat = Constant1, RestrictedCat = Constant2, SimpleCat = Constant3, Linear=Linear, Griffiths=Griffiths, PiecewiseConstant=PiecewiseConstant, Farrington=Farrington))
+
+```
+
+## Customization
+```{r}
+# Below is an example from Vynnycky et al. Custom functions were used to replicate their work. Notice that, although the data is age group data, one does not need to provide a group_pi or group_foi function. The integration is handled internally by the FoiFromCatalyticModel function. However, if one would like to avoid integration and provide closed forms for the mean seroprevalence (group_pi) or mean force of infection (group_foi) over an interval, it is best to provide these functions for efficiency.
+
+Vynnycky_AB_pi_t <- function(t, par) {
+  foi_y <- par[["foi_y"]]
+  foi_o <- par[["foi_o"]]
+  
+  ifelse(
+    t < 13,
+    1 - exp(-foi_y * (t - 0.5)),
+    1 - exp(-foi_y * 12.5 - foi_o * (t - 13))
+  )
+}
+
+Vynnycky_AB_foi_t <- function(t, par) {
+  foi_y <- par[["foi_y"]]
+  foi_o <- par[["foi_o"]]
+  ifelse(t < 13, foi_y, foi_o)  # vectorised, always finite if par is finite
+}
+
+Vynnycky_CD_pi_t <- function(t, par) {
+  foi <- par[["foi"]]
+  return(1-exp(-foi * (t-0.5)))
+}
+
+Vynnycky_CD_foi_t <- function(t, par) {
+  foi <- par[["foi"]]
+  return(rep(foi, length(t)))
+}
+
+par_init_AB <- c(foi_y = 0.1, foi_o = 0.01)
+
+par_init_CD <- c(foi = 0.1)
+
+
+# Vynnycky dataset 18
+
+t <- matrix(c(15,20,25,30,35,40,19,24,29,34,39,45), ncol=2) #c("15-19","20-24","25-29","30-34","35-39","40-45")
+n <- c(121,556,1065,946,614,169)
+pos_percentage <- c(89.3,90.3,89.4,90.3,90.4,93.5)
+pos_percentage <- pos_percentage*0.01
+positive_count_unrounded <- n*pos_percentage
+y <- round(positive_count_unrounded,0)
+
+# model fits
+
+A.18 <- FoiFromCatalyticModel(t, y, n, pi_t = Vynnycky_AB_pi_t, foi_t = Vynnycky_AB_foi_t, lower = c(0, 0), upper=c(1, 1), rho=NA, boot_num=1000, par_init=par_init_AB)
+
+B.18 <- FoiFromCatalyticModel(t, y, n, pi_t = Vynnycky_AB_pi_t, foi_t = Vynnycky_AB_foi_t, lower = c(0, 0), upper=c(1, 1), rho=1, boot_num=1000, par_init=par_init_AB)
+
+C.18 <- FoiFromCatalyticModel(t,y,n,pi_t = Vynnycky_CD_pi_t, foi_t = Vynnycky_CD_foi_t, rho=NA, par_init=par_init_CD, lower=c(0), upper=c(1), boot_num=1000)
+
+D.18 <- FoiFromCatalyticModel(t,y,n,pi_t = Vynnycky_CD_pi_t, foi_t = Vynnycky_CD_foi_t, rho=1, par_init=par_init_CD, lower=c(0), upper=c(1), boot_num=1000)
+
+plotFOI(list(ModelA=A.18, ModelB=B.18, ModelC=C.18, ModelD=D.18), from=0, to=45) # note model B is on top of model A. They yield identical results in this case
 ```

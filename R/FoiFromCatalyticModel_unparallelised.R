@@ -55,8 +55,6 @@
 #' \itemize{
 #'   \item \code{params_MLE}: Named list of MLEs.
 #'   \item \code{params_CI}: Named list of 95% CIs for parameters (percentile).
-#'   \item \code{AIC}, \code{AICc}: Information criteria computed from the fitted model
-#'         (\code{AICc} uses \code{n_total = sum(n)} in the small-sample correction).
 #'   \item \code{foi_MLE}: Named list of FOI estimates by age or age-interval label.
 #'   \item \code{foi_CIs}: Named list of 95% CIs for FOI by age or age-interval label.
 #'   \item \code{bootparams}: Matrix of bootstrap parameter estimates (rows = replicates).
@@ -401,15 +399,6 @@ FoiFromCatalyticModel_unparallelised <- function(t, y, n, pi_t=NA, foi_t = NA, g
     return(list(foi=foi_list, foi_CI=foi_CI_list, foi_grid=foi_grid, t=t, boot_y=boot_y, n=n, foi_t=foi_t, spline_pi_t=spline_pi_t))
   } # t, boot_y, n are used by R0... is there a better way to do this?
 
-  # calculate AIC and AICc
-  n_total <- sum(n)
-  k <- length(par_init)
-  neg_binom_ll <- neg_total_binom_loglik(params_MLE, pi_t, group_pi, group_foi, t, y, n, rho, param_names)
-  # AIC <- -2*logLik + 2*k
-  AIC <- 2*neg_binom_ll + 2*k
-  # AICc <- AIC + (2*k*(k+1)) / (n - k - 1)
-  AICc <- AIC + (2*k*(k+1)) / (n_total - k - 1)
 
-
-  return(list(params_MLE = params_MLE_list, params_CI=params_CI, AIC=AIC, AICc = AICc, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, pi_t=pi_t, group_pi=group_pi, tau=tau)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
+  return(list(params_MLE = params_MLE_list, params_CI=params_CI, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, group_foi=group_foi, pi_t=pi_t, group_pi=group_pi, tau=tau, rho=rho, model_fixed_params=model_fixed_params, t=t, y=y, n=n)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
 }

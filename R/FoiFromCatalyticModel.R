@@ -60,7 +60,6 @@
 #'   \item \code{params_MLE}: Named list of MLEs.
 #'   \item \code{params_CI}: Named list of 95% CIs for parameters (percentile).
 #'   \item \code{neg_loglik}: Value of the negative log-likelihood at the MLE.
-#'   \item \code{AIC}, \code{AICc}: Information criteria computed from \code{neg_loglik} and parameter count.
 #'   \item \code{foi_MLE}: Named list of FOI estimates by age or age interval label.
 #'   \item \code{foi_CIs}: Named list of 95% CIs for FOI by age or age interval label.
 #'   \item \code{bootparams}: Matrix of bootstrap parameter estimates (rows = replicates).
@@ -440,19 +439,6 @@ FoiFromCatalyticModel <- function(t, y, n, pi_t=NA, foi_t = NA, group_pi = NULL,
   } # t, boot_y, n are used by R0... is there a better way to do this?
 
 
-  # calculate AIC and AICc
-  num_groups <- length(n)
-  k <- length(par_init)
-  neg_loglik <- neg_total_binom_loglik(params_MLE, pi_t, group_pi, group_foi, t, y, n, rho, param_names)
-  # AIC <- -2*logLik + 2*k
-  AIC <- 2*neg_loglik + 2*k
-  # AICc <- AIC + (2*k*(k+1)) / (n - k - 1)
-  if (num_groups - k - 1 == 0) {
-    AICc <- NA
-  } else {
-    AICc <- AIC + (2*k*(k+1)) / (num_groups - k - 1)
-  }
 
-
-  return(list(params_MLE = params_MLE_list, params_CI=params_CI, neg_loglik=neg_loglik, AIC=AIC, AICc=AICc, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, pi_t=pi_t, group_pi=group_pi, tau=tau)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
+  return(list(params_MLE = params_MLE_list, params_CI=params_CI, foi_MLE=foi_MLE_list, foi_CIs = foi_CI_list, bootparams = boot_matrix, foi_t=foi_t, group_foi=group_foi, pi_t=pi_t, group_pi=group_pi, tau=tau, rho=rho, model_fixed_params=model_fixed_params, t=t, y=y, n=n)) # output foi_t so that it can be used by plot! output pi_t and group_pi for R0!
 }

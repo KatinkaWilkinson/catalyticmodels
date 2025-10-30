@@ -70,6 +70,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
 
   else if (foi_functional_form == "Griffiths") {
     tau <- model_fixed_params$tau
+    force(tau)
     foi_t <- function(t, par) {
       gamma0 <- par[["gamma0"]]
       gamma1 <- par[["gamma1"]]
@@ -90,6 +91,8 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
   else if (foi_functional_form == "PiecewiseConstant") {
     upper_cutoffs <- model_fixed_params$upper_cutoffs
     lower_cutoffs <- c(0, upper_cutoffs[-length(upper_cutoffs)])
+    force(upper_cutoffs)
+    force(lower_cutoffs)
     foi_t <- function(t, par) {
       # Each interval is [lower_cutoffs[i], upper_cutoffs[i])
       interval_index <- findInterval(t, lower_cutoffs, rightmost.closed = FALSE)
@@ -113,6 +116,7 @@ set_foi_t <- function(catalytic_model_type, foi_functional_form, model_fixed_par
 
   else if (!is.na(catalytic_model_type) && catalytic_model_type == "WaningImmunity" && foi_functional_form == "Splines") {
     w <- model_fixed_params$w
+    force(w)
     foi_t <- function(t, spline_pi_t) {
       pi <- predict(spline_pi_t, t)$y # y is the smooth.spline response name. "y" here is predicting pi(t) (we inputted y/n - this is what we are trying to predict. Remember, y/n=pi(t))
       dpi_t_dt <- predict(spline_pi_t, t, deriv=1)$y
