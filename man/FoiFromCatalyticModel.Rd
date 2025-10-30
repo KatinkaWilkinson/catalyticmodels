@@ -85,7 +85,6 @@ If \code{foi_functional_form != "Splines"} a list with:
 \item \code{params_MLE}: Named list of MLEs.
 \item \code{params_CI}: Named list of 95\% CIs for parameters (percentile).
 \item \code{neg_loglik}: Value of the negative log-likelihood at the MLE.
-\item \code{AIC}, \code{AICc}: Information criteria computed from \code{neg_loglik} and parameter count.
 \item \code{foi_MLE}: Named list of FOI estimates by age or age interval label.
 \item \code{foi_CIs}: Named list of 95\% CIs for FOI by age or age interval label.
 \item \code{bootparams}: Matrix of bootstrap parameter estimates (rows = replicates).

@@ -433,6 +433,4 @@ FoiFromCatalyticModel(
   rho = 1.2
 )
 # → "rho must be NA or a numeric scalar in [0, 1]."
-
-
 ```

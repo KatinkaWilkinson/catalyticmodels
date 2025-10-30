@@ -84,8 +84,6 @@ If \code{foi_functional_form != "Splines"} a list with:
 \itemize{
 \item \code{params_MLE}: Named list of MLEs.
 \item \code{params_CI}: Named list of 95\% CIs for parameters (percentile).
-\item \code{AIC}, \code{AICc}: Information criteria computed from the fitted model
-(\code{AICc} uses \code{n_total = sum(n)} in the small-sample correction).
 \item \code{foi_MLE}: Named list of FOI estimates by age or age-interval label.
 \item \code{foi_CIs}: Named list of 95\% CIs for FOI by age or age-interval label.
 \item \code{bootparams}: Matrix of bootstrap parameter estimates (rows = replicates).
